@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 
 # ==================== 1. 初始化 Google Sheets 資料庫 ====================
 # ⚠️ 請務必將下方的網址替換成你自己的 Google 試算表網址！
-SHEET_URL = "請把你的_Google_Sheet_網址貼在這裡"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagDHclyeNJiRffTbB1E/edit?gid=0#gid=0"
 
 @st.cache_resource
 def get_gspread_client():
