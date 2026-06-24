@@ -21,10 +21,7 @@ def get_gspread_client():
     client = gspread.authorize(credentials)
     return client
 
-# 建立雲端連接
-try:
-    gc = get_gspread_client()
-    sh = gc.open_by_url(SHEET_URL)
+
 except Exception as e:
     st.error("❌ 無法連接到 Google Sheets。請檢查：\n1. 網址是否正確\n2. 是否已將服務帳號 Email 加入共用並設為「編輯者」")
     st.stop()
