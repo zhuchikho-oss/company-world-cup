@@ -5,7 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ==================== 1. 初始化 Google Sheets 資料庫 ====================
-# ⚠️ 請務必將下方的網址替換成你自己的 Google 試算表網址！
+# 網址已自動為您配置完成
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagDHclyeNJiRffTbB1E/edit?gid=0#gid=0"
 
 @st.cache_resource
@@ -21,9 +21,13 @@ def get_gspread_client():
     client = gspread.authorize(credentials)
     return client
 
-
+# 建立雲端連接 (已修正縮排語法錯誤)
+try:
+    gc = get_gspread_client()
+    sh = gc.open_by_url(SHEET_URL)
 except Exception as e:
     st.error("❌ 無法連接到 Google Sheets。請檢查：\n1. 網址是否正確\n2. 是否已將服務帳號 Email 加入共用並設為「編輯者」")
+    st.exception(e)
     st.stop()
 
 def read_sheet(sheet_name):
@@ -276,79 +280,7 @@ with tabs[3]:
                 sel_unsettled = st.selectbox("📌 選擇要結算的比賽：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
                 settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
                 
-                st.warning("⚠️ **核心結算邏輯**：請勾選這場比賽中**所有被判定為贏（中獎）**的選項。未勾選的將一律判定為輸。")
-                
-                match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
-                
-                if match_all_odds.empty:
-                    st.error("❌ 此比賽尚未配置任何賠率，無法結算！")
-                else:
-                    st.markdown("#### 1. 勾選獲勝的賠率選項")
-                    winning_odds_ids = []
-                    
-                    odds_cols = st.columns(2)
-                    for idx, row in match_all_odds.iterrows():
-                        col_target = odds_cols[idx % 2]
-                        with col_target:
-                            is_win = st.checkbox(f"[{row['play_type']}] {row['selection']}", key=f"win_{row['odd_id']}")
-                            if is_win:
-                                winning_odds_ids.append(row['odd_id'])
-                    
-                    st.markdown("#### 2. 錄入最終賽果資料庫")
-                    res_col1, res_col2, res_col3 = st.columns(3)
-                    with res_col1: sc_home = st.number_input("🏠 主隊入球數", min_value=0, value=2)
-                    with res_col2: sc_away = st.number_input("✈️ 客隊入球數", min_value=0, value=1)
-                    with res_col3: f_goal = st.text_input("⚽ 首名入球員 (選填)", value="")
-                    
-                    if st.button("📊 確認賽果，一鍵自動派彩！", type="primary", use_container_width=True):
-                        with st.spinner('系統結算中，同時將資料同步至 Google Sheets，請稍候...'):
-                            # 1. 更新比賽狀態
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = sc_home
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_away"] = sc_away
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "first_goal_player"] = f_goal
-                            save_sheet(df_matches, "Matches")
-                            
-                            # 2. 更新 BetDetails 狀態
-                            if not df_details.empty:
-                                df_details.loc[(df_details["match_id"] == settle_m_id) & (df_details["odd_id"].isin(winning_odds_ids)), "status"] = "贏"
-                                df_details.loc[(df_details["match_id"] == settle_m_id) & (~df_details["odd_id"].isin(winning_odds_ids)), "status"] = "輸"
-                                save_sheet(df_details, "BetDetails")
-                            
-                            # 3. 掃描所有主注單進行派彩
-                            if not df_bets.empty:
-                                open_bets = df_bets[df_bets["status"] == "未開獎"]
-                                
-                                for idx, bet in open_bets.iterrows():
-                                    b_id = bet["bet_id"]
-                                    bet_details = df_details[df_details["bet_id"] == b_id]
-                                    
-                                    if settle_m_id in bet_details["match_id"].values:
-                                        all_statuses = bet_details["status"].tolist()
-                                        
-                                        if "輸" in all_statuses:
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "輸"
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = 0.0
-                                        elif "未開獎" not in all_statuses:
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "贏"
-                                            total_odds = 1.0
-                                            for _, detail in bet_details.iterrows():
-                                                total_odds *= float(detail["odds_value"])
-                                            
-                                            win_amt = round(float(bet["stake"]) * total_odds, 2)
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = win_amt
-                                            
-                                            u_id = bet["user_id"]
-                                            df_users.loc[df_users["user_id"] == u_id, "balance"] += win_amt
-                                
-                                save_sheet(df_bets, "Bets")
-                                save_sheet(df_users, "Users")
-                            
-                            time.sleep(1)
-                            
-                        st.success("🎉 本場賽事結算完成！贏家的虛擬積分已自動派發，排行榜與 Google Sheets 已實時刷新。")
-                        time.sleep(1.5)
-                        st.rerun()
+                st.warning("
 
 
 
