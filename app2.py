@@ -8,8 +8,8 @@ from google.oauth2.service_account import Credentials
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagDHclyeNJiRffTbB1E/edit?gid=0#gid=0"
 
 @st.cache_resource
-def get_gspread_client():
-    """連接 Google Sheets 的授權驗證"""
+def get_spreadsheet_client():
+    """建立並快取 Google Sheets 連接物件，避免重複登入"""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -17,11 +17,11 @@ def get_gspread_client():
     skey = dict(st.secrets["gcp_service_account"])
     credentials = Credentials.from_service_account_info(skey, scopes=scopes)
     client = gspread.authorize(credentials)
-    return client
+    return client.open_by_url(SHEET_URL)
 
+# 建立雲端連接（採用 Resource 快取防爆）
 try:
-    gc = get_gspread_client()
-    sh = gc.open_by_url(SHEET_URL)
+    sh = get_spreadsheet_client()
 except Exception as e:
     st.error("""❌ 無法連接到 Google Sheets。請檢查：
 1. 網址是否正確
@@ -29,8 +29,9 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
+@st.cache_data(ttl=5)
 def read_sheet(sheet_name):
-    """從 Google Sheet 讀取資料並轉換為 DataFrame"""
+    """從 Google Sheet 讀取資料並快取 5 秒，極大化節省 API 流量"""
     worksheet = sh.worksheet(sheet_name)
     data = worksheet.get_all_records()
     if not data:
@@ -45,7 +46,7 @@ def read_sheet(sheet_name):
     return pd.DataFrame(data)
 
 def save_sheet(df, sheet_name):
-    """將資料覆寫存回 Google Sheet"""
+    """將資料覆寫存回 Google Sheet，並立即清空快取以確保資料同步"""
     worksheet = sh.worksheet(sheet_name)
     worksheet.clear()
     if not df.empty:
@@ -54,6 +55,9 @@ def save_sheet(df, sheet_name):
         worksheet.update(values=data_to_write, range_name="A1")
     else:
         worksheet.update(values=[df.columns.values.tolist()], range_name="A1")
+    
+    # 關鍵核心：清除所有的讀取快取，強迫下一步驟讀取到最新寫入的數據
+    st.cache_data.clear()
 
 # ==================== 2. Streamlit 頁面全局設定 ====================
 st.set_page_config(page_title="企業世界盃虛擬競猜", page_icon="🏆", layout="wide")
@@ -271,7 +275,6 @@ with tabs[3]:
                 sel_unsettled = st.selectbox("📌 選擇要結算的比賽：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
                 settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
                 
-                # 這裡改用安全的三引號，防止複製貼上被斷行報錯
                 st.warning("""⚠️ **核心結算邏輯**：請勾選這場比賽中**所有被判定為贏（中獎）**的選項。未勾選的將一律判定為輸。""")
                 
                 match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
