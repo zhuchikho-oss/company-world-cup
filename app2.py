@@ -28,7 +28,7 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=20)
 def read_sheet(sheet_name):
     """從 Google Sheet 讀取資料（內建解鎖 Streamlit 訊息遮蔽機制）"""
     try:
