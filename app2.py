@@ -69,7 +69,7 @@ def save_sheet(df, sheet_name):
         st.error(f"❌ 寫入【{sheet_name}】失敗。")
         st.stop()
 
-# ==================== 2. Streamlit 頁面全局設定 (深色高清 + 樹狀圖 CSS) ====================
+# ==================== 2. Streamlit 頁面全局設定 (深色高清 + 高級運彩風賽程) ====================
 st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="centered")
 
 st.markdown("""
@@ -117,37 +117,146 @@ st.markdown("""
     .news-title { color: #f8fafc !important; font-weight: 800; font-size: 1.05rem; margin-bottom: 4px; }
     .news-time { color: #94a3b8 !important; font-size: 0.8rem; }
 
-    /* 🌳 橫向滑動樹狀圖容器 */
-    .tree-container {
+    /* 🏆 全新升級高質感電子競技風賽程樹狀圖容器 */
+    .bracket-wrapper {
         display: flex;
         flex-direction: row;
         overflow-x: auto; 
-        padding-bottom: 20px;
+        padding: 20px 5px;
         gap: 25px;
         white-space: nowrap;
     }
-    /* 隱藏捲軸但保留滑動功能 (美化) */
-    .tree-container::-webkit-scrollbar { height: 6px; }
-    .tree-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    .bracket-wrapper::-webkit-scrollbar { height: 6px; }
+    .bracket-wrapper::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     
-    .tree-column {
+    /* 每一輪單獨成一直欄 */
+    .bracket-round {
         display: flex;
         flex-direction: column;
         justify-content: space-around;
-        gap: 15px;
-        min-width: 160px;
+        gap: 20px;
+        min-width: 230px;
     }
-    .tree-match {
-        background-color: #1a1f33;
-        border: 2px solid #475569;
-        border-radius: 8px;
-        padding: 10px;
+    
+    /* 每一欄上方的精美輪次標題 */
+    .round-title {
+        font-size: 0.85rem;
+        color: #fef3c7 !important;
+        font-weight: 800;
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        background: #1e293b;
+        padding: 6px 12px;
+        border-radius: 20px;
+        border: 1px solid #475569;
+        margin-bottom: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    .tree-match-title { font-size: 0.8rem; color: #cbd5e1 !important; margin-bottom: 6px; }
-    .tree-team { color: #f8fafc !important; font-weight: 800; font-size: 1.1rem; }
-    .tree-score { color: #fbbf24 !important; font-weight: 900; }
+    
+    /* 高級淘汰賽卡片設計 */
+    .match-card {
+        background: linear-gradient(135deg, #131a35, #1e294b);
+        border: 2px solid #38bdf8; /* 科技藍高亮邊框 */
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    /* 非首輪的待定賽事改為精緻灰白框 */
+    .border-gray {
+        border-color: #475569 !important;
+    }
+    
+    /* 總決賽至高榮譽黃金框 */
+    .final-card {
+        border: 3px solid #fbbf24 !important; 
+        background: linear-gradient(135deg, #1c1917, #292524) !important;
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+    }
+    
+    /* 卡片頂部欄 */
+    .match-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.75rem;
+        color: #94a3b8 !important;
+        border-bottom: 1px solid #334155;
+        padding-bottom: 6px;
+        font-weight: bold;
+    }
+    
+    /* 隊伍資料行 */
+    .team-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .team-name {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #f8fafc !important;
+    }
+    .text-muted {
+        color: #64748b !important;
+        font-weight: 600;
+    }
+    
+    /* 運彩顆粒感比分框 */
+    .team-score {
+        font-size: 1.05rem;
+        font-weight: 900;
+        color: #fbbf24 !important;
+        background: #0f172a;
+        padding: 2px 10px;
+        border-radius: 6px;
+        min-width: 32px;
+        text-align: center;
+        border: 1px solid #334155;
+    }
+    
+    /* 狀態標籤 */
+    .status-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 900 !important;
+        color: #ffffff !important;
+    }
+    .status-badge.settled { background-color: #059669; }
+    .status-badge.live { background-color: #dc2626; animation: pulse 1.5s infinite; }
+    .status-badge.upcoming { background-color: #475569; }
+    
+    /* 核心：晉級導航路線線路指引 */
+    .next-route {
+        font-size: 0.75rem;
+        color: #38bdf8 !important;
+        background: #0f172a;
+        padding: 4px 8px;
+        border-radius: 6px;
+        text-align: center;
+        font-weight: bold;
+        margin-top: 4px;
+        border: 1px solid #1e293b;
+    }
+    
+    .final-winner {
+        font-size: 0.8rem;
+        color: #fbbf24 !important;
+        text-align: center;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        margin-top: 4px;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
     </style>
     
     <div class="main-banner">
@@ -192,22 +301,20 @@ with tabs[0]:
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})
     st.dataframe(df_ranking[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 樹狀圖賽程 & 即時新聞 ====================
+# ==================== TAB 2: 高級樹狀圖賽程 & 即時新聞 ====================
 with tabs[1]:
     st.markdown("### 📰 最新世界盃動態")
     with st.expander("📡 點擊展開即時體育新聞 (自動更新)", expanded=True):
         try:
-            # 抓取 Yahoo Sports Soccer RSS (免 API Key，穩定)
             response = requests.get("https://sports.yahoo.com/soccer/rss/", timeout=4)
             if response.status_code == 200:
                 root = ET.fromstring(response.content)
                 count = 0
                 for item in root.findall('./channel/item'):
-                    if count >= 4: # 顯示最新 4 條
+                    if count >= 4:
                         break
                     title = item.find('title').text
                     pubDate = item.find('pubDate').text
-                    # 簡單過濾掉時區字串讓畫面乾淨點
                     clean_time = pubDate.split(" +")[0].split(" GMT")[0]
                     st.markdown(f"""
                     <div class="news-card">
@@ -222,68 +329,129 @@ with tabs[1]:
             st.markdown("<p style='color:#94a3b8;'>網路連線超時，新聞模組暫停服務</p>", unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### 🌳 晉級賽程樹狀圖")
-    st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：在手機上請向<b>左/右滑動</b>，查看後續賽程進度。</p>", unsafe_allow_html=True)
+    st.markdown("### 🏆 淘汰賽晉級線路圖")
+    st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：手機版支援<b>左右滑動瀏覽</b>，卡片底部標註了精確的晉級路徑！</p>", unsafe_allow_html=True)
 
-    # 動態生成第一輪(16強)的賽事 HTML
+    # 動態讀取並生成第一輪(16強賽)的卡片 HTML
     round_1_html = ""
     if not df_matches.empty:
-        for idx, row in df_matches.head(4).iterrows(): # 為了排版美觀，先抓前4場作為示範
+        for idx, row in df_matches.head(4).iterrows(): # 抓前 4 場進行樹狀排版對其
+            m_id = row['match_id']
             home = row['home_team']
             away = row['away_team']
-            s_home = row['score_home'] if row['status'] == '已結算' else ""
-            s_away = row['score_away'] if row['status'] == '已結算' else ""
-            display_home = f"{home} <span class='tree-score'>{s_home}</span>" if s_home else home
-            display_away = f"{away} <span class='tree-score'>{s_away}</span>" if s_away else away
+            status = row['status']
+            s_home = row['score_home'] if status == '已結算' else "-"
+            s_away = row['score_away'] if status == '已結算' else "-"
+            
+            if status == "已結算":
+                badge = '<span class="status-badge settled">已完賽</span>'
+            elif status == "進行中":
+                badge = '<span class="status-badge live">LIVE</span>'
+            else:
+                badge = '<span class="status-badge upcoming">未開賽</span>'
+                
+            # 計算該場次的贏家會去哪一場八強賽
+            next_target = "八強 QF1" if m_id in [1, 2] else "八強 QF2"
             
             round_1_html += f"""
-            <div class="tree-match">
-                <div class="tree-match-title">Match {row['match_id']} | {row['status']}</div>
-                <div class="tree-team">{display_home}</div>
-                <hr style="margin:6px 0; border-color:#334155 !important;">
-                <div class="tree-team">{display_away}</div>
+            <div class="match-card">
+                <div class="match-header">
+                    <span>場次 {m_id}</span>
+                    {badge}
+                </div>
+                <div class="team-row">
+                    <span class="team-name">⚽ {home}</span>
+                    <span class="team-score">{s_home}</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name">⚽ {away}</span>
+                    <span class="team-score">{s_away}</span>
+                </div>
+                <div class="next-route">➡️ 勝者晉級：{next_target}</div>
             </div>
             """
     else:
-        round_1_html = "<div class='tree-match'><div class='tree-team'>暫無賽事數據</div></div>"
+        round_1_html = '<div class="match-card"><div class="team-name" style="text-align:center;">⏳ 暫無賽事數據</div></div>'
 
-    # 組裝完整的橫向捲動樹狀圖 HTML
+    # 組裝高質感橫向滑動淘汰賽樹狀圖
     bracket_html = f"""
-    <div class="tree-container">
-        <div class="tree-column">
+    <div class="bracket-wrapper">
+        <div class="bracket-round">
+            <div class="round-title">🔥 十六強淘汰賽</div>
             {round_1_html}
         </div>
 
-        <div class="tree-column">
-            <div class="tree-match">
-                <div class="tree-match-title">Quarter-Final 1</div>
-                <div class="tree-team">❓ 晉級隊伍</div>
-                <hr style="margin:6px 0; border-color:#334155 !important;">
-                <div class="tree-team">❓ 晉級隊伍</div>
+        <div class="bracket-round">
+            <div class="round-title">⚡ 八強半準決賽</div>
+            
+            <div class="match-card border-gray">
+                <div class="match-header">
+                    <span>半準決賽 QF1</span>
+                    <span class="status-badge upcoming">待定</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (Match 1 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (Match 2 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="next-route">➡️ 勝者晉級：準決賽 SF1</div>
             </div>
-            <div class="tree-match">
-                <div class="tree-match-title">Quarter-Final 2</div>
-                <div class="tree-team">❓ 晉級隊伍</div>
-                <hr style="margin:6px 0; border-color:#334155 !important;">
-                <div class="tree-team">❓ 晉級隊伍</div>
+
+            <div class="match-card border-gray">
+                <div class="match-header">
+                    <span>半準決賽 QF2</span>
+                    <span class="status-badge upcoming">待定</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (Match 3 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (Match 4 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="next-route">➡️ 勝者晉級：準決賽 SF1</div>
             </div>
         </div>
 
-        <div class="tree-column">
-            <div class="tree-match">
-                <div class="tree-match-title">Semi-Final</div>
-                <div class="tree-team">❓ 待定</div>
-                <hr style="margin:6px 0; border-color:#334155 !important;">
-                <div class="tree-team">❓ 待定</div>
+        <div class="bracket-round">
+            <div class="round-title">🌟 四強準決賽</div>
+            <div class="match-card border-gray">
+                <div class="match-header">
+                    <span>準決賽 SF1</span>
+                    <span class="status-badge upcoming">待定</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (QF1 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name text-muted">待定 (QF2 勝者)</span>
+                    <span class="team-score">-</span>
+                </div>
+                <div class="next-route" style="color: #fbbf24 !important;">🏆 勝者前進總決賽</div>
             </div>
         </div>
         
-        <div class="tree-column">
-            <div class="tree-match" style="border-color:#fbbf24; border-width:3px; background-color:#2e2411;">
-                <div class="tree-match-title" style="color:#fbbf24 !important; font-size:0.9rem;">🏆 2026 總決賽</div>
-                <div class="tree-team">👑 待定</div>
-                <hr style="margin:6px 0; border-color:#fbbf24 !important;">
-                <div class="tree-team">👑 待定</div>
+        <div class="bracket-round">
+            <div class="round-title" style="color:#fbbf24;">👑 冠軍總決賽</div>
+            <div class="match-card final-card">
+                <div class="match-header" style="border-color: #fbbf24;">
+                    <span style="color:#fbbf24 !important; font-weight:900;">🏆 FINAL 總決賽</span>
+                    <span class="status-badge" style="background:#fbbf24; color:#000;">CHAMPION</span>
+                </div>
+                <div class="team-row" style="margin-top: 5px;">
+                    <span class="team-name" style="color:#fff;">🥇 上半區冠軍</span>
+                    <span class="team-score" style="color:#fbbf24;">-</span>
+                </div>
+                <div class="team-row">
+                    <span class="team-name" style="color:#fff;">🥇 下半區冠軍</span>
+                    <span class="team-score" style="color:#fbbf24;">-</span>
+                </div>
+                <div class="final-winner">👑 爭奪世界之巔</div>
             </div>
         </div>
     </div>
