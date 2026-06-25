@@ -9,7 +9,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagD
 
 @st.cache_resource
 def get_spreadsheet_client():
-    """建立並快取 Google Sheets 連接物件，避免重複登入"""
+    """建立並快取 Google Sheets 連接物件"""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -19,7 +19,6 @@ def get_spreadsheet_client():
     client = gspread.authorize(credentials)
     return client.open_by_url(SHEET_URL)
 
-# 建立雲端連接（採用 Resource 快取防爆）
 try:
     sh = get_spreadsheet_client()
 except Exception as e:
@@ -31,33 +30,47 @@ except Exception as e:
 
 @st.cache_data(ttl=5)
 def read_sheet(sheet_name):
-    """從 Google Sheet 讀取資料並快取 5 秒，極大化節省 API 流量"""
-    worksheet = sh.worksheet(sheet_name)
-    data = worksheet.get_all_records()
-    if not data:
-        columns_map = {
-            "Users": ["user_id", "name", "balance"],
-            "Matches": ["match_id", "home_team", "away_team", "status", "score_home", "score_away", "first_goal_player"],
-            "Odds": ["odd_id", "match_id", "play_type", "selection", "odds_value"],
-            "Bets": ["bet_id", "user_id", "bet_mode", "stake", "status", "win_amount"],
-            "BetDetails": ["detail_id", "bet_id", "match_id", "odd_id", "selection", "odds_value", "status"]
-        }
-        return pd.DataFrame(columns=columns_map.get(sheet_name, []))
-    return pd.DataFrame(data)
+    """從 Google Sheet 讀取資料（內建解鎖 Streamlit 訊息遮蔽機制）"""
+    try:
+        worksheet = sh.worksheet(sheet_name)
+        data = worksheet.get_all_records()
+        if not data:
+            columns_map = {
+                "Users": ["user_id", "name", "balance"],
+                "Matches": ["match_id", "home_team", "away_team", "status", "score_home", "score_away", "first_goal_player"],
+                "Odds": ["odd_id", "match_id", "play_type", "selection", "odds_value"],
+                "Bets": ["bet_id", "user_id", "bet_mode", "stake", "status", "win_amount"],
+                "BetDetails": ["detail_id", "bet_id", "match_id", "odd_id", "selection", "odds_value", "status"]
+            }
+            return pd.DataFrame(columns=columns_map.get(sheet_name, []))
+        return pd.DataFrame(data)
+    except gspread.exceptions.APIError as google_error:
+        # 🔥 強行抓出 Google 的原始報錯，防止 Streamlit 遮蔽
+        st.error(f"❌ 讀取分頁【{sheet_name}】時，Google 伺服器返回了錯誤！")
+        st.code(f"狀態代碼 (Status Code): {google_error.response.status_code}\n回應內文 (Response): {google_error.response.text}")
+        st.info("💡 提示：如果是 429 錯誤，代表 Google 限制尚未解除，請靜候 2 分鐘再重整網頁。")
+        st.stop()
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"❌ 在你的 Google 試算表內，找不到名為【{sheet_name}】的分頁標籤！")
+        st.info("💡 請檢查你的 Google Sheet 底部，分頁名稱是否完全符合：Users, Matches, Odds, Bets, BetDetails (注意大小寫)")
+        st.stop()
 
 def save_sheet(df, sheet_name):
-    """將資料覆寫存回 Google Sheet，並立即清空快取以確保資料同步"""
-    worksheet = sh.worksheet(sheet_name)
-    worksheet.clear()
-    if not df.empty:
-        df_to_save = df.fillna("")
-        data_to_write = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-        worksheet.update(values=data_to_write, range_name="A1")
-    else:
-        worksheet.update(values=[df.columns.values.tolist()], range_name="A1")
-    
-    # 關鍵核心：清除所有的讀取快取，強迫下一步驟讀取到最新寫入的數據
-    st.cache_data.clear()
+    """將資料覆寫存回 Google Sheet，並立即清空快取"""
+    try:
+        worksheet = sh.worksheet(sheet_name)
+        worksheet.clear()
+        if not df.empty:
+            df_to_save = df.fillna("")
+            data_to_write = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+            worksheet.update(values=data_to_write, range_name="A1")
+        else:
+            worksheet.update(values=[df.columns.values.tolist()], range_name="A1")
+        st.cache_data.clear()
+    except gspread.exceptions.APIError as google_error:
+        st.error(f"❌ 寫入分頁【{sheet_name}】時，Google 伺服器返回了錯誤！")
+        st.code(f"狀態代碼 (Status Code): {google_error.response.status_code}\n回應內文 (Response): {google_error.response.text}")
+        st.stop()
 
 # ==================== 2. Streamlit 頁面全局設定 ====================
 st.set_page_config(page_title="企業世界盃虛擬競猜", page_icon="🏆", layout="wide")
@@ -92,7 +105,6 @@ df_details = read_sheet("BetDetails")
 # ==================== TAB 1: 資產排行榜 ====================
 with tabs[0]:
     st.markdown("### 📈 內部財富龍虎榜 (Wealth Ranking)")
-    
     df_ranking = df_users.sort_values(by="balance", ascending=False).reset_index(drop=True)
     
     if len(df_ranking) >= 3:
@@ -105,7 +117,6 @@ with tabs[0]:
             st.metric(label="🥉 季軍 (Top 3)", value=df_ranking.iloc[2]["name"], delta=f"{df_ranking.iloc[2]['balance']} pts", delta_color="off")
     
     st.divider()
-    
     df_ranking.index = df_ranking.index + 1
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "當前可用積分 (pts)"})
     st.dataframe(df_ranking[["同事姓名", "當前可用積分 (pts)"]], use_container_width=True)
@@ -215,7 +226,6 @@ with tabs[1]:
 # ==================== 3. 賽事與賠率管理 (Admin) ====================
 with tabs[2]:
     st.markdown("### 🛠️ 賽事及自定義賠率後台")
-    
     col_match, col_odd = st.columns(2)
     with col_match:
         with st.container(border=True):
@@ -345,6 +355,5 @@ with tabs[3]:
                         st.success("""🎉 本場賽事結算完成！贏家的虛擬積分已自動派發，排行榜與 Google Sheets 已實時刷新。""")
                         time.sleep(1.5)
                         st.rerun()
-
 
 
