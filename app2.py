@@ -74,17 +74,11 @@ st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="c
 
 st.markdown("""
 <style>
-/* 強制全局背景為深海軍藍 */
 .stApp { background-color: #0c1328 !important; }
-
-/* 標籤、段落與標題改為淺米白色 */
 p, label, h1, h2, h3, h4, h5, h6 { color: #fef3c7 !important; font-weight: 700 !important; }
-
-/* 下拉選單、輸入框內部的字體保持純黑色，避免白底隱形 */
 div[data-baseweb="select"] *, div[role="listbox"] *, ul[data-baseweb="menu"] *, input {
     color: #000000 !important; font-weight: 800 !important;
 }
-
 .main-banner {
     background-color: #0c1328; padding: 15px; border-radius: 8px;
     border: 2px solid #fef3c7; text-align: center; margin-bottom: 20px;
@@ -92,14 +86,12 @@ div[data-baseweb="select"] *, div[role="listbox"] *, ul[data-baseweb="menu"] *, 
 .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7 !important; margin-bottom: 5px; } 
 .sub-title { font-size: 1.1rem; color: #fef3c7 !important; font-weight: 800; }
 hr { border-color: #cbd5e1 !important; }
-
 .news-card {
     background-color: #1a1f33; border-left: 4px solid #fef3c7; padding: 12px 15px;
     margin-bottom: 12px; border-radius: 0 8px 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 .news-title { color: #f8fafc !important; font-weight: 800; font-size: 1.05rem; margin-bottom: 4px; }
 .news-time { color: #94a3b8 !important; font-size: 0.8rem; }
-
 .bracket-wrapper {
     display: flex; flex-direction: row; overflow-x: auto; padding: 20px 5px; gap: 25px; white-space: nowrap;
 }
@@ -156,9 +148,9 @@ if "role" in st.query_params and st.query_params["role"] == "boss":
     is_admin = True
 
 if is_admin:
-    tabs = st.tabs(["📊 財富排行", "📅 賽程與賽況", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
+    tabs = st.tabs(["📊 財富排行", "📅 賽況樹状圖", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
 else:
-    tabs = st.tabs(["📊 財富排行", "📅 賽程與賽況", "🎲 快速投注"])
+    tabs = st.tabs(["📊 財富排行", "📅 賽況樹状圖", "🎲 快速投注"])
 
 # ==================== 3. 提取雲端數據 ====================
 df_users = read_sheet("Users")
@@ -184,10 +176,10 @@ with tabs[0]:
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})
     st.dataframe(df_ranking[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 高級樹狀圖賽程 & 即時新聞 ====================
+# ==================== TAB 2: 高級樹狀圖賽程 (32強) ====================
 with tabs[1]:
     st.markdown("### 📰 最新世界盃動態")
-    with st.expander("📡 點擊展開即時體育新聞 (自動更新)", expanded=True):
+    with st.expander("📡 點擊展開即時體育新聞", expanded=False):
         try:
             response = requests.get("https://sports.yahoo.com/soccer/rss/", timeout=4)
             if response.status_code == 200:
@@ -205,17 +197,25 @@ with tabs[1]:
 </div>
 """, unsafe_allow_html=True)
                     count += 1
-            else:
-                st.markdown("<p style='color:#94a3b8;'>暫時無法取得新聞資料</p>", unsafe_allow_html=True)
         except Exception:
-            st.markdown("<p style='color:#94a3b8;'>網路連線超時，新聞模組暫停服務</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#94a3b8;'>網路連線超時</p>", unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### 🏆 淘汰賽晉級線路圖")
-    st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：手機版支援<b>左右滑動瀏覽</b>，卡片底部標註了精確的晉級路徑！</p>", unsafe_allow_html=True)
+    st.markdown("### 🏆 32強淘汰賽晉級線路圖")
+    st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：手機版支援<b>左右滑動瀏覽</b>！</p>", unsafe_allow_html=True)
 
-    # 🛠️ 動態讀取與生成函式
-    def get_match_card_html(m_id, title_name, next_route_text):
+    # 動態計算下一輪場次 ID 與提示文案
+    def get_route_text(m_id):
+        if 1 <= m_id <= 16: return f"➡️ 晉級：十六強 (場次 {17 + (m_id - 1) // 2})"
+        elif 17 <= m_id <= 24: return f"➡️ 晉級：八強 (場次 {25 + (m_id - 17) // 2})"
+        elif 25 <= m_id <= 28: return f"➡️ 晉級：四強 (場次 {29 + (m_id - 25) // 2})"
+        elif 29 <= m_id <= 30: return "🏆 前進總決賽 (場次 31)"
+        elif m_id == 31: return "👑 爭奪世界之巔"
+        else: return "➡️ 晉級下一輪"
+
+    # 動態讀取與生成函式
+    def get_match_card_html(m_id, title_name):
+        route_text = get_route_text(m_id)
         if df_matches.empty:
             return f'<div class="match-card"><div class="match-header"><span>{title_name}</span><span class="status-badge upcoming">未開賽</span></div><div class="team-row"><span class="team-name text-muted">待定</span><span class="team-score">-</span></div><div class="team-row"><span class="team-name text-muted">待定</span><span class="team-score">-</span></div></div>'
         
@@ -230,65 +230,43 @@ with tabs[1]:
             s_home = str(row['score_home']) if status == '已結算' else "-"
             s_away = str(row['score_away']) if status == '已結算' else "-"
 
-        if status == "已結算":
-            badge = '<span class="status-badge settled">已完賽</span>'
-        elif status == "進行中":
-            badge = '<span class="status-badge live">LIVE</span>'
-        else:
-            badge = '<span class="status-badge upcoming">未開賽</span>'
+        if status == "已結算": badge = '<span class="status-badge settled">已完賽</span>'
+        elif status == "進行中": badge = '<span class="status-badge live">LIVE</span>'
+        else: badge = '<span class="status-badge upcoming">未開賽</span>'
             
-        is_final = (m_id == 8)
+        is_final = (m_id == 31)
         card_class = "match-card final-card" if is_final else "match-card"
-        if not m_rows.empty and m_id > 4 and status == "未開賽":
+        if not m_rows.empty and m_id > 16 and status == "未開賽":
             card_class += " border-gray"
             
         header_style = ' style="border-color: #fbbf24;"' if is_final else ''
         title_style = ' style="color:#fbbf24 !important; font-weight:900;"' if is_final else ''
         score_style = ' style="color:#fbbf24;"' if is_final else ''
         
-        # HTML 絕對不可縮排
         html = f"""
 <div class="{card_class}">
-<div class="match-header"{header_style}><span{title_style}>{title_name}</span>{badge}</div>
+<div class="match-header"{header_style}><span{title_style}>{title_name} (M{m_id})</span>{badge}</div>
 <div class="team-row"><span class="team-name">⚽ {home}</span><span class="team-score"{score_style}>{s_home}</span></div>
 <div class="team-row"><span class="team-name">⚽ {away}</span><span class="team-score"{score_style}>{s_away}</span></div>
 """
-        if is_final:
-            html += f'<div class="final-winner">{next_route_text}</div></div>'
-        else:
-            html += f'<div class="next-route">{next_route_text}</div></div>'
+        if is_final: html += f'<div class="final-winner">{route_text}</div></div>'
+        else: html += f'<div class="next-route">{route_text}</div></div>'
         return html
 
-    round_1_html = ""
-    round_1_html += get_match_card_html(1, "場次 1", "➡️ 勝者晉級：八強 QF1")
-    round_1_html += get_match_card_html(2, "場次 2", "➡️ 勝者晉級：八強 QF1")
-    round_1_html += get_match_card_html(3, "場次 3", "➡️ 勝者晉級：八強 QF2")
-    round_1_html += get_match_card_html(4, "場次 4", "➡️ 勝者晉級：八強 QF2")
-
-    qf1_html = get_match_card_html(5, "半準決賽 QF1", "➡️ 勝者晉級：準決賽 SF1")
-    qf2_html = get_match_card_html(6, "半準決賽 QF2", "➡️ 勝者晉級：準決賽 SF1")
-    sf1_html = get_match_card_html(7, "準決賽 SF1", "🏆 勝者前進總決賽")
-    final_html = get_match_card_html(8, "🏆 FINAL 總決賽", "👑 爭奪世界之巔")
+    # 自動生成各階段 HTML
+    ro32_html = "".join([get_match_card_html(i, "32強賽") for i in range(1, 17)])
+    ro16_html = "".join([get_match_card_html(i, "十六強賽") for i in range(17, 25)])
+    qf_html = "".join([get_match_card_html(i, "半準決賽") for i in range(25, 29)])
+    sf_html = "".join([get_match_card_html(i, "準決賽") for i in range(29, 31)])
+    final_html = get_match_card_html(31, "🏆 FINAL 總決賽")
 
     bracket_html = f"""
 <div class="bracket-wrapper">
-<div class="bracket-round">
-<div class="round-title">🔥 十六強淘汰賽</div>
-{round_1_html}
-</div>
-<div class="bracket-round">
-<div class="round-title">⚡ 八強半準決賽</div>
-{qf1_html}
-{qf2_html}
-</div>
-<div class="bracket-round">
-<div class="round-title">🌟 四強準決賽</div>
-{sf1_html}
-</div>
-<div class="bracket-round">
-<div class="round-title" style="color:#fbbf24;">👑 冠軍總決賽</div>
-{final_html}
-</div>
+<div class="bracket-round"><div class="round-title">⚔️ 32強淘汰賽</div>{ro32_html}</div>
+<div class="bracket-round"><div class="round-title">🔥 16強淘汰賽</div>{ro16_html}</div>
+<div class="bracket-round"><div class="round-title">⚡ 八強半準決賽</div>{qf_html}</div>
+<div class="bracket-round"><div class="round-title">🌟 四強準決賽</div>{sf_html}</div>
+<div class="bracket-round"><div class="round-title" style="color:#fbbf24;">👑 冠軍總決賽</div>{final_html}</div>
 </div>
 """
     st.markdown(bracket_html, unsafe_allow_html=True)
@@ -319,7 +297,7 @@ with tabs[2]:
                     st.markdown("⚠️ 這場比賽還沒設定賠率！")
                 else:
                     odds_options = match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ {r['odds_value']} 倍", axis=1).tolist()
-                    selected_odd_str = st.selectbox("🎯 選擇盤口選項：", odds_options)
+                    selected_odd_str = st.selectbox("🎯 選擇盤口选项：", odds_options)
                     
                     chosen_play_type = selected_odd_str.split("] ")[0].replace("[", "")
                     chosen_selection = selected_odd_str.split("] ")[1].split(" @")[0]
@@ -363,7 +341,7 @@ with tabs[2]:
                             selected_odds_ids.append((m_id, chosen_odd["odd_id"]))
             
             if len(selected_odds_ids) < 2:
-                st.markdown("⚠️ 過關模式至少需要選擇 2 場不同的賽事項目！")
+                st.markdown("⚠️ 過關模式至少需要選擇 2 場不同的賽事项目！")
             else:
                 total_odds = 1.0
                 for _, o_id in selected_odds_ids:
@@ -398,59 +376,132 @@ if is_admin:
     with tabs[3]:
         st.markdown("### ⚙️ 賽事管理與後台")
         
-        # ================= 新增：淘汰賽晉級名單編輯器 =================
-        st.markdown("#### 🏆 淘汰賽晉級名單快速設定")
+        # ------------------ 區塊 1：手動修改/新增/刪除任何賽事 ------------------
+        st.markdown("#### 🛠️ 單一賽事編輯 / 新增 / 刪除")
         with st.container(border=True):
-            st.markdown("<p style='font-size:0.85rem; color:#94a3b8;'>👉 在這裡直接輸入各階段的隊伍名稱。按下儲存後，將自動同步到賽況頁面的樹狀圖！(若還不知道隊伍，可保持空白)</p>", unsafe_allow_html=True)
+            manage_mode = st.radio("選擇操作模式：", ["✏️ 編輯 / 刪除現有賽事", "➕ 新增自定義賽事"], horizontal=True)
             
-            with st.form("bracket_update_form"):
-                col1, col2 = st.columns(2)
-                updated_teams = {}
-                
-                match_labels = {
-                    1: "🔥 16強 - 場次 1", 2: "🔥 16強 - 場次 2", 3: "🔥 16強 - 場次 3", 4: "🔥 16強 - 場次 4",
-                    5: "⚡ 八強 QF1 (M1勝 vs M2勝)", 6: "⚡ 八強 QF2 (M3勝 vs M4勝)",
-                    7: "🌟 四強 SF1 (QF1勝 vs QF2勝)", 8: "👑 總決賽 FINAL"
-                }
-                
-                for m_id in range(1, 9):
-                    target_col = col1 if m_id <= 4 else col2
+            if manage_mode == "✏️ 編輯 / 刪除現有賽事":
+                if df_matches.empty:
+                    st.warning("目前資料庫沒有任何賽事。")
+                else:
+                    match_list = df_matches.apply(lambda r: f"ID:{r['match_id']} | {r['home_team']} VS {r['away_team']} ({r['status']})", axis=1).tolist()
+                    sel_match_str = st.selectbox("🔍 選擇要修改的賽事", match_list)
+                    sel_m_id = int(sel_match_str.split("ID:")[1].split(" |")[0])
                     
-                    existing_match = df_matches[df_matches['match_id'] == m_id]
-                    curr_home = str(existing_match.iloc[0]['home_team']) if not existing_match.empty else ""
-                    curr_away = str(existing_match.iloc[0]['away_team']) if not existing_match.empty else ""
+                    target_row = df_matches[df_matches['match_id'] == sel_m_id].iloc[0]
                     
-                    with target_col:
-                        st.markdown(f"**{match_labels[m_id]}**")
-                        h_team = st.text_input(f"🏠 主隊", value=curr_home, key=f"h_{m_id}")
-                        a_team = st.text_input(f"✈️ 客隊", value=curr_away, key=f"a_{m_id}")
-                        updated_teams[m_id] = {"home": h_team, "away": a_team}
-                        st.markdown("<hr style='margin:8px 0; border-color:#334155;'>", unsafe_allow_html=True)
+                    with st.form("edit_match_form"):
+                        c1, c2, c3 = st.columns(3)
+                        new_home = c1.text_input("🏠 主隊", value=str(target_row['home_team']))
+                        new_away = c2.text_input("✈️ 客隊", value=str(target_row['away_team']))
+                        new_status = c3.selectbox("📊 狀態", ["未開賽", "進行中", "已結算"], index=["未開賽", "進行中", "已結算"].index(target_row['status']) if target_row['status'] in ["未開賽", "進行中", "已結算"] else 0)
                         
-                submitted = st.form_submit_button("💾 儲存晉級名單並同步至樹狀圖", type="primary", use_container_width=True)
-                
-                if submitted:
-                    for m_id, teams in updated_teams.items():
-                        h_val = teams['home'].strip()
-                        a_val = teams['away'].strip()
+                        col_btn1, col_btn2 = st.columns(2)
+                        btn_update = col_btn1.form_submit_button("💾 更新此賽事資料", type="primary", use_container_width=True)
+                        btn_delete = col_btn2.form_submit_button("🗑️ 刪除此賽事", use_container_width=True)
                         
-                        if not df_matches[df_matches['match_id'] == m_id].empty:
-                            df_matches.loc[df_matches['match_id'] == m_id, 'home_team'] = h_val
-                            df_matches.loc[df_matches['match_id'] == m_id, 'away_team'] = a_val
-                        else:
-                            if h_val or a_val:
-                                new_m = pd.DataFrame([{
-                                    "match_id": m_id, "home_team": h_val, "away_team": a_val, 
-                                    "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""
-                                }])
-                                df_matches = pd.concat([df_matches, new_m], ignore_index=True)
-                    
-                    save_sheet(df_matches, "Matches")
-                    st.toast("✅ 晉級名單已全面更新！", icon="🎉")
-                    time.sleep(1)
-                    st.rerun()
+                        if btn_update:
+                            df_matches.loc[df_matches['match_id'] == sel_m_id, 'home_team'] = new_home
+                            df_matches.loc[df_matches['match_id'] == sel_m_id, 'away_team'] = new_away
+                            df_matches.loc[df_matches['match_id'] == sel_m_id, 'status'] = new_status
+                            save_sheet(df_matches, "Matches")
+                            st.toast("✅ 賽事已更新！", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        if btn_delete:
+                            df_matches = df_matches[df_matches['match_id'] != sel_m_id]
+                            save_sheet(df_matches, "Matches")
+                            st.toast("🗑️ 賽事已成功刪除！", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
 
-        # ================= 原有功能：新增賠率項目 =================
+            elif manage_mode == "➕ 新增自定義賽事":
+                with st.form("add_match_form"):
+                    c1, c2 = st.columns(2)
+                    new_m_id = int(df_matches['match_id'].max() + 1) if not df_matches.empty else 1
+                    custom_id = c1.number_input("設定場次 ID (避開 1~31 的樹狀圖專用 ID)", min_value=1, value=max(32, new_m_id))
+                    c2.markdown("<br><p style='color:#94a3b8; font-size:0.8rem;'>如果設定 ID 為 1~31，將會顯示在賽況樹狀图中。</p>", unsafe_allow_html=True)
+                    
+                    c3, c4 = st.columns(2)
+                    add_home = c3.text_input("🏠 填寫主隊名稱")
+                    add_away = c4.text_input("✈️ 填寫客隊名稱")
+                    
+                    if st.form_submit_button("➕ 建立賽事", type="primary", use_container_width=True):
+                        if not df_matches[df_matches['match_id'] == custom_id].empty:
+                            st.error(f"❌ ID {custom_id} 已經存在，請更換其他 ID。")
+                        else:
+                            new_m = pd.DataFrame([{"match_id": custom_id, "home_team": add_home, "away_team": add_away, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
+                            df_matches = pd.concat([df_matches, new_m], ignore_index=True)
+                            save_sheet(df_matches, "Matches")
+                            st.toast("✅ 新賽事建立成功！", icon="🎉")
+                            time.sleep(1)
+                            st.rerun()
+
+        # ------------------ 區塊 2：樹狀圖批次設定 (31 場) ------------------
+        st.markdown("#### 🏆 32強淘汰賽樹狀圖 一鍵設定")
+        st.markdown("<p style='font-size:0.85rem; color:#94a3b8;'>👉 分區填寫隊伍，系統會自動將隊伍寫入對應的場次 ID (1 ~ 31)。留白則顯示為待定。</p>", unsafe_allow_html=True)
+        
+        with st.form("bracket_update_form"):
+            with st.expander("⚔️ 填寫 32強 (場次 1 ~ 16)", expanded=False):
+                c1, c2 = st.columns(2)
+                updated_teams = {}
+                for m_id in range(1, 17):
+                    target_col = c1 if m_id <= 8 else c2
+                    existing = df_matches[df_matches['match_id'] == m_id]
+                    ch = str(existing.iloc[0]['home_team']) if not existing.empty else ""
+                    ca = str(existing.iloc[0]['away_team']) if not existing.empty else ""
+                    with target_col:
+                        h = st.text_input(f"M{m_id} 主队", value=ch, key=f"h_{m_id}")
+                        a = st.text_input(f"M{m_id} 客队", value=ca, key=f"a_{m_id}")
+                        updated_teams[m_id] = {"home": h, "away": a}
+                        st.markdown("<hr style='margin:4px 0; border-color:#334155;'>", unsafe_allow_html=True)
+
+            with st.expander("🔥 填寫 16強 (場次 17 ~ 24)", expanded=False):
+                c1, c2 = st.columns(2)
+                for m_id in range(17, 25):
+                    target_col = c1 if m_id <= 20 else c2
+                    existing = df_matches[df_matches['match_id'] == m_id]
+                    ch = str(existing.iloc[0]['home_team']) if not existing.empty else ""
+                    ca = str(existing.iloc[0]['away_team']) if not existing.empty else ""
+                    with target_col:
+                        h = st.text_input(f"M{m_id} 主队", value=ch, key=f"h_{m_id}")
+                        a = st.text_input(f"M{m_id} 客队", value=ca, key=f"a_{m_id}")
+                        updated_teams[m_id] = {"home": h, "away": a}
+                        st.markdown("<hr style='margin:4px 0; border-color:#334155;'>", unsafe_allow_html=True)
+
+            with st.expander("⚡ 填寫 8強 至 總決賽 (場次 25 ~ 31)", expanded=False):
+                c1, c2 = st.columns(2)
+                for m_id in range(25, 32):
+                    target_col = c1 if m_id <= 28 else c2
+                    existing = df_matches[df_matches['match_id'] == m_id]
+                    ch = str(existing.iloc[0]['home_team']) if not existing.empty else ""
+                    ca = str(existing.iloc[0]['away_team']) if not existing.empty else ""
+                    with target_col:
+                        lbl = f"M{m_id} (八強)" if m_id<=28 else (f"M{m_id} (四強)" if m_id<=30 else "M31 (決賽)")
+                        h = st.text_input(f"{lbl} 主队", value=ch, key=f"h_{m_id}")
+                        a = st.text_input(f"{lbl} 客队", value=ca, key=f"a_{m_id}")
+                        updated_teams[m_id] = {"home": h, "away": a}
+                        st.markdown("<hr style='margin:4px 0; border-color:#334155;'>", unsafe_allow_html=True)
+            
+            if st.form_submit_button("💾 儲存樹狀圖名單", type="primary", use_container_width=True):
+                for m_id, teams in updated_teams.items():
+                    h_val = teams['home'].strip()
+                    a_val = teams['away'].strip()
+                    if not df_matches[df_matches['match_id'] == m_id].empty:
+                        df_matches.loc[df_matches['match_id'] == m_id, 'home_team'] = h_val
+                        df_matches.loc[df_matches['match_id'] == m_id, 'away_team'] = a_val
+                    else:
+                        if h_val or a_val:
+                            new_m = pd.DataFrame([{"match_id": m_id, "home_team": h_val, "away_team": a_val, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
+                            df_matches = pd.concat([df_matches, new_m], ignore_index=True)
+                save_sheet(df_matches, "Matches")
+                st.toast("✅ 樹狀圖名單已全面更新！", icon="🎉")
+                time.sleep(1)
+                st.rerun()
+
+        # ------------------ 區塊 3：新增賠率項目 ------------------
         with st.container(border=True):
             st.markdown("#### ⚙️ 為賽事新增賠率盤口")
             if df_matches.empty:
@@ -460,8 +511,8 @@ if is_admin:
                 sel_match = st.selectbox("選擇要開盤的比賽", match_list)
                 target_m_id = int(sel_match.split("ID:")[-1].replace(")", ""))
                 
-                p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球", "晉級隊伍"])
-                selection_name = st.text_input("選項名稱 (例:主勝)", value="主勝")
+                p_type = st.selectbox("玩法種類", ["主客和", "讓球盘", "波膽盘", "首名進球", "晉級隊伍"])
+                selection_name = st.text_input("选项名稱 (例:主勝)", value="主勝")
                 odds_val = st.number_input("賠率設定", min_value=1.01, value=2.20, step=0.05)
                 
                 if st.button("儲存賠率項目", use_container_width=True):
@@ -486,7 +537,7 @@ if is_admin:
                     sel_unsettled = st.selectbox("📌 選擇準備派彩的完賽場次：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
                     settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
                     
-                    st.markdown("⚠️ **重要步驟**：請在下方打勾這場比賽中**『所有贏』**的選項。沒打勾視為未中獎。")
+                    st.markdown("⚠️ **重要步驟**：請在下方打勾這場比賽中**『所有贏』**的选项。沒打勾視為未中獎。")
                     match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
                     
                     if match_all_odds.empty:
@@ -501,7 +552,7 @@ if is_admin:
                         sc_home = st.number_input("🏠 主隊比分", min_value=0, value=2)
                         sc_away = st.number_input("✈️ 客隊比分", min_value=0, value=1)
                         
-                        if st.button("📊 確認比分與勾選項，執行派彩", type="primary", use_container_width=True):
+                        if st.button("📊 確認比分與勾选项，執行派彩", type="primary", use_container_width=True):
                             with st.spinner('同步資料庫與發放點數中...'):
                                 df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
                                 df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = str(sc_home)
@@ -536,4 +587,4 @@ if is_admin:
                                     save_sheet(df_users, "Users")
                             st.success("🎉 結算完成！贏家點數已撥款。")
                             time.sleep(1)
-                            st.rerun()
+                            st.rerun()   
