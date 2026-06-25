@@ -1,3 +1,5 @@
+# 核心修復點：全局深色背景補丁 (防 TypeError 與防 429 TTL 優化版)
+# 使用方法：全選並覆蓋您 GitHub 裡的整個 app2.py
 import streamlit as st
 import pandas as pd
 import time
@@ -67,61 +69,60 @@ def save_sheet(df, sheet_name):
         st.error(f"❌ 寫入【{sheet_name}】失敗。")
         st.stop()
 
-# ==================== 2. Streamlit 頁面全局設定 (極致高對比深字版) ====================
+# ==================== 2. Streamlit 頁面全局設定 (深色主題補丁版) ====================
 st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="centered")
 
 st.markdown("""
     <style>
-    /* 強制全局背景為純白色，字體全部為純黑色，字體加粗 */
+    /* 🔥 全局深色主題核心 CSS 🔥 */
+    
+    /* 強制全局背景為深海軍藍 */
     .stApp { 
-        background-color: #ffffff !important; 
+        background-color: #0c1328 !important; 
     }
     
-    /* 所有文字與標籤強制黑字 */
+    /* 所有 Markdown 文字、標籤強制改為淺米白色，並加粗 */
     div, p, label, span, li {
-        color: #000000 !important;
+        color: #fef3c7 !important;
         font-weight: 700 !important;
     }
     
-    /* 網頁頂部 Banner 優化：粗黑外框，純黑大字 */
+    /* 網頁頂部 Banner 優化：深色背景，淺金色粗框 */
     .main-banner {
-        background-color: #ffffff;
+        background-color: #0c1328;
         padding: 15px;
         border-radius: 8px;
-        border: 3px solid #000000;
+        border: 2px solid #fef3c7;
         text-align: center;
         margin-bottom: 20px;
     }
-    .main-title { font-size: 1.8rem; font-weight: 900; color: #000000; margin-bottom: 5px; } 
-    .sub-title { font-size: 1.1rem; color: #000000; font-weight: 800; }
+    .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7; margin-bottom: 5px; } 
+    .sub-title { font-size: 1.1rem; color: #fef3c7; font-weight: 800; }
     
-    /* 手機版賽程黑框卡片設計 */
+    /* 手機版賽程卡片設計：淺框、淺字 */
     .bracket-match {
-        background-color: #ffffff;
+        background-color: #1a1f33; /* 稍微不同的深色卡片背景 */
         padding: 16px;
         border-radius: 8px;
-        border: 2px solid #000000;
+        border: 2px solid #fef3c7;
         margin-bottom: 14px;
         text-align: center;
     }
-    .bracket-team { font-weight: 900; color: #000000; font-size: 1.3rem; } 
-    .bracket-vs { color: #d60000; font-size: 1.1rem; margin: 6px 0; font-weight: 900; }
+    .bracket-team { font-weight: 900; color: #f8fafc; font-size: 1.3rem; } /* 最醒目的淺色 */
+    .bracket-vs { color: #fef3c7; font-size: 1.1rem; margin: 6px 0; font-weight: 900; }
     
-    /* 強制所有 Streamlit 自帶標題為極深藍色與極粗體 */
-    h1, h2, h3, h4 { color: #0b1d3a !important; font-weight: 900 !important; }
+    /* 強制所有 Streamlit 自帶標題為淺米白色 */
+    h1, h2, h3, h4 { color: #fef3c7 !important; font-weight: 900 !important; }
     
-    /* 讓 Streamlit 元件按鈕更黑更明顯 */
-    .stButton>button {
-        border: 2px solid #000000 !important;
-        color: #000000 !important;
-        font-weight: 900 !important;
-        background-color: #ffffff !important;
+    /* 讓分割線顏色變淺，避免看不見 */
+    hr {
+        border-color: #cbd5e1 !important;
     }
     </style>
     
     <div class="main-banner">
         <div class="main-title">🏆 2026 世界盃 32強競猜</div>
-        <div class="sub-title">【內部專屬手機高清晰版】</div>
+        <div class="sub-title">【內部專屬手機高清晰深色版】</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -154,18 +155,18 @@ with tabs[0]:
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})
     st.dataframe(df_ranking[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 32強對陣賽程圖 (高對比粗黑框設計) ====================
+# ==================== TAB 2: 32強對陣賽程圖 (手機直向排版) ====================
 with tabs[1]:
-    st.markdown("### 📅 32 強對陣樹狀表")
-    st.markdown("ℹ️ **提示：請點擊下方大黑字區塊，即可展開查看對手。**")
+    st.markdown("### 📅 32 強對陣名單")
+    st.markdown("ℹ️ **提示：請點擊下方區塊展開查看對局。**")
     
-    with st.expander("▶️ 點擊展開：上半區賽事 (A組-D組對陣)", expanded=True):
+    with st.expander("▶️ 展開：上半區賽事 (A組-D組對陣)", expanded=True):
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇩🇪 德國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇯🇵 日本</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格蘭</div><div class="bracket-vs">VS</div><div class="bracket-team">🇸🇳 塞內加爾</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇫🇷 法國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇺🇸 美國</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇦研廷</div><div class="bracket-vs">VS</div><div class="bracket-team">🇦🇺 澳洲</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="bracket-match"><div class="bracket-team">🇦RG 阿根廷</div><div class="bracket-vs">VS</div><div class="bracket-team">🇦🇺 澳洲</div></div>', unsafe_allow_html=True)
 
-    with st.expander("▶️ 點擊展開：下半區賽事 (E組-H組對陣)", expanded=False):
+    with st.expander("▶️ 展開：下半區賽事 (E組-H組對陣)", expanded=False):
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇪🇸 西班牙</div><div class="bracket-vs">VS</div><div class="bracket-team">摩洛哥 🇲🇦</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇵🇹 葡萄牙</div><div class="bracket-vs">VS</div><div class="bracket-team">瑞士 🇨🇭</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇧🇷 巴西</div><div class="bracket-vs">VS</div><div class="bracket-team">南韓 🇰🇷</div></div>', unsafe_allow_html=True)
@@ -194,19 +195,19 @@ with tabs[2]:
                 
                 match_odds = df_odds[df_odds["match_id"] == m_id]
                 if match_odds.empty:
-                    st.markdown("⚠️ **這場比賽管理員還沒設定賠率！**")
+                    st.markdown("⚠️ 這場比賽還沒設定賠率！")
                 else:
                     odds_options = match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ 賠率:{r['odds_value']}", axis=1).tolist()
-                    selected_odd_str = st.selectbox("🎯 選擇你想猜的結果：", odds_options)
+                    selected_odd_str = st.selectbox("🎯 選擇盤口選項：", odds_options)
                     
                     chosen_play_type = selected_odd_str.split("] ")[0].replace("[", "")
                     chosen_selection = selected_odd_str.split("] ")[1].split(" @")[0]
                     chosen_odd = match_odds[(match_odds["play_type"] == chosen_play_type) & (match_odds["selection"] == chosen_selection)].iloc[0]
                     o_id = chosen_odd["odd_id"]
                     
-                    stake = st.number_input("💵 輸入下注金額 (點數)：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
+                    stake = st.number_input("💵 輸入下注金額：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                     
-                    if st.button("📱 確認送出注單 (確認扣款)", type="primary", use_container_width=True):
+                    if st.button("📱 確認送出注單", type="primary", use_container_width=True):
                         df_users.loc[df_users["user_id"] == user_row["user_id"], "balance"] -= stake
                         save_sheet(df_users, "Users")
                         
@@ -224,7 +225,7 @@ with tabs[2]:
                         st.rerun()
                         
         else:
-            st.markdown("#### 🔗 串關神器 (勾選多場比賽拼高賠率)")
+            st.markdown("#### 🔗 串關組合 (Parlay Builder)")
             selected_odds_ids = []
             
             with st.container(border=True):
@@ -232,27 +233,27 @@ with tabs[2]:
                     m_id = row['match_id']
                     match_odds = df_odds[df_odds["match_id"] == m_id]
                     if not match_odds.empty:
-                        odds_options = ["⬜ 不串這場比賽"] + match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ {r['odds_value']}", axis=1).tolist()
+                        odds_options = ["⬜ 不串此場"] + match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ {r['odds_value']}", axis=1).tolist()
                         choice = st.selectbox(f"⚽ {row['home_team']} VS {row['away_team']}", odds_options, key=f"parlay_{m_id}")
-                        if choice != "⬜ 不串這場比賽":
+                        if choice != "⬜ 不串此場":
                             chosen_play_type = choice.split("] ")[0].replace("[", "")
                             chosen_selection = choice.split("] ")[1].split(" @")[0]
                             chosen_odd = match_odds[(match_odds["play_type"] == chosen_play_type) & (match_odds["selection"] == chosen_selection)].iloc[0]
                             selected_odds_ids.append((m_id, chosen_odd["odd_id"]))
             
             if len(selected_odds_ids) < 2:
-                st.markdown("⚠️ **串關玩法至少需要選擇 2 場不同的比賽項目！**")
+                st.markdown("⚠️ 過關模式至少需要選擇 2 場不同的賽事項目！")
             else:
                 total_odds = 1.0
                 for _, o_id in selected_odds_ids:
                     total_odds *= float(df_odds[df_odds["odd_id"] == o_id].iloc[0]["odds_value"])
                 
                 st.markdown(f"### 📊 當前組合: **{len(selected_odds_ids)} 串 1**")
-                st.markdown(f"### 📈 總預計賠率: **{total_odds:.2f} 倍**")
+                st.markdown(f"### 📈 總預計賠率: **{total_odds:.2f}**")
                 
-                stake = st.number_input("💵 輸入串關下注總金額：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
+                stake = st.number_input("💵 串關投注金額：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                 
-                if st.button("📱 確認執行串關下單", type="primary", use_container_width=True):
+                if st.button("🚀 確認執行串關下單", type="primary", use_container_width=True):
                     df_users.loc[df_users["user_id"] == user_row["user_id"], "balance"] -= stake
                     save_sheet(df_users, "Users")
                     
@@ -267,7 +268,7 @@ with tabs[2]:
                         df_details = pd.concat([df_details, new_detail], ignore_index=True)
                     save_sheet(df_details, "BetDetails")
                     
-                    st.toast("串關投注完成！", icon="🎉")
+                    st.toast("串關下單成功！", icon="🎉")
                     time.sleep(1)
                     st.rerun()
 
@@ -278,7 +279,7 @@ with tabs[3]:
         st.markdown("#### ➕ 建立新開盤賽事")
         h_team = st.text_input("🏠 主隊名稱", value="德國")
         a_team = st.text_input("✈️ 客隊名稱", value="日本")
-        if st.button("確認創建這場比賽", use_container_width=True):
+        if st.button("創建比賽", use_container_width=True):
             new_m_id = len(df_matches) + 1
             new_m = pd.DataFrame([{"match_id": new_m_id, "home_team": h_team, "away_team": a_team, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
             df_matches = pd.concat([df_matches, new_m], ignore_index=True)
@@ -290,22 +291,22 @@ with tabs[3]:
     with st.container(border=True):
         st.markdown("#### ⚙️ 新增賠率項目")
         if df_matches.empty:
-            st.markdown("請先去上面創建比賽欄位。")
+            st.markdown("請先創建比賽欄位。")
         else:
             match_list = df_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1).tolist()
-            sel_match = st.selectbox("選擇指定比賽場次", match_list)
+            sel_match = st.selectbox("選擇比賽場次", match_list)
             target_m_id = int(sel_match.split("ID:")[-1].replace(")", ""))
             
-            p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽(精確比分)", "首名進球"])
-            selection_name = st.text_input("結果名稱 (例如: 主勝、客勝、2:2)", value="主勝")
-            odds_val = st.number_input("輸入賠率數字", min_value=1.01, value=2.20, step=0.05)
+            p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球"])
+            selection_name = st.text_input("選項名稱 (例:主勝)", value="主勝")
+            odds_val = st.number_input("賠率設定", min_value=1.01, value=2.20, step=0.05)
             
-            if st.button("確認寫入這筆賠率", use_container_width=True):
+            if st.button("儲存賠率項目", use_container_width=True):
                 new_o_id = len(df_odds) + 1
                 new_odd = pd.DataFrame([{"odd_id": new_o_id, "match_id": target_m_id, "play_type": p_type, "selection": selection_name, "odds_value": odds_val}])
                 df_odds = pd.concat([df_odds, new_odd], ignore_index=True)
                 save_sheet(df_odds, "Odds")
-                st.toast("賠率設定成功！")
+                st.toast("賠率新增成功！")
                 time.sleep(1)
                 st.rerun()
 
@@ -317,29 +318,28 @@ with tabs[4]:
     else:
         unsettled_matches = df_matches[df_matches["status"] == "未開賽"]
         if unsettled_matches.empty:
-            st.markdown("### 🎉 太棒了！所有比賽均已全數結算完畢。")
+            st.markdown("### 🎉 太棒了！所有比賽皆已結算完畢。")
         else:
             with st.container(border=True):
                 sel_unsettled = st.selectbox("📌 選擇準備派彩的完賽場次：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
                 settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
                 
-                st.markdown("⚠️ **重要結算步驟**：請在下方打勾這場比賽中**『所有中獎、獲勝』**的項目。沒打勾的一律判輸。")
+                st.markdown("⚠️ **重要步驟**：請在下方打勾這場比賽中**『所有贏』**的選項。沒打勾視為未中獎。")
                 match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
                 
                 if match_all_odds.empty:
-                    st.markdown("❌ 這場比賽還沒設定任何賠率。")
+                    st.error("此賽事查無賠率。")
                 else:
                     winning_odds_ids = []
                     for idx, row in match_all_odds.iterrows():
-                        if st.checkbox(f"【中獎請打勾】 -> [{row['play_type']}] {row['selection']}", key=f"win_{row['odd_id']}"):
+                        if st.checkbox(f"[{row['play_type']}] {row['selection']}", key=f"win_{row['odd_id']}"):
                             winning_odds_ids.append(row['odd_id'])
                     
-                    st.markdown("---")
-                    st.markdown("#### 填入最終官方常規時間比分")
-                    sc_home = st.number_input("🏠 主隊總比數：", min_value=0, value=2)
-                    sc_away = st.number_input("✈️ 客隊總比數：", min_value=0, value=1)
+                    st.markdown("#### 填入最終比分")
+                    sc_home = st.number_input("🏠 主隊比分", min_value=0, value=2)
+                    sc_away = st.number_input("✈️ 客隊比分", min_value=0, value=1)
                     
-                    if st.button("📊 確認無誤，一鍵發放獎金點數！", type="primary", use_container_width=True):
+                    if st.button("📊 確認比分與勾選項，執行派彩", type="primary", use_container_width=True):
                         with st.spinner('同步資料庫與發放點數中...'):
                             df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
                             df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = str(sc_home)
@@ -372,6 +372,6 @@ with tabs[4]:
                                             df_users.loc[df_users["user_id"] == u_id, "balance"] += win_amt
                                 save_sheet(df_bets, "Bets")
                                 save_sheet(df_users, "Users")
-                        st.success("🎉 結算完成！贏家點數已自動撥款。")
+                        st.success("🎉 結算完成！贏家點數已撥款。")
                         time.sleep(1)
                         st.rerun()
