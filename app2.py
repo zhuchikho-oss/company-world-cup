@@ -67,7 +67,7 @@ def save_sheet(df, sheet_name):
         st.error(f"❌ 寫入【{sheet_name}】失敗。")
         st.stop()
 
-# ==================== 2. Streamlit 頁面全局設定 (修復下拉選單隱形問題) ====================
+# ==================== 2. Streamlit 頁面全局設定 (深色高清版) ====================
 st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="centered")
 
 st.markdown("""
@@ -83,7 +83,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
     
-    /* 🚨 核心修復：讓下拉選單、輸入框內部的字體保持純黑色，避免白底隱形 🚨 */
+    /* 下拉選單、輸入框內部的字體保持純黑色，避免白底隱形 */
     div[data-baseweb="select"] *, 
     div[role="listbox"] *, 
     ul[data-baseweb="menu"] *,
@@ -128,8 +128,18 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# 簡短標籤，防手機擠壓變形
-tabs = st.tabs(["📊 財富排行", "📅 32強賽程", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
+# 🚨 核心解決方案三：檢測網址是否有隱藏暗號 `?role=boss`
+is_admin = False
+if "role" in st.query_params and st.query_params["role"] == "boss":
+    is_admin = True
+
+# 根據是不是管理員，動態決定要顯示哪些分頁
+if is_admin:
+    # 管理員看得到完整的 5 個分頁
+    tabs = st.tabs(["📊 財富排行", "📅 32強賽程", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
+else:
+    # 同事只看得到前 3 個普通分頁，後台被完全隱蔽！
+    tabs = st.tabs(["📊 財富排行", "📅 32強賽程", "🎲 快速投注"])
 
 # ==================== 3. 提取雲端數據 ====================
 df_users = read_sheet("Users")
@@ -274,106 +284,108 @@ with tabs[2]:
                     time.sleep(1)
                     st.rerun()
 
-# ==================== TAB 4: 管理後台 ====================
-with tabs[3]:
-    st.markdown("### ⚙️ 賽事管理與新增")
-    with st.container(border=True):
-        st.markdown("#### ➕ 建立新開盤賽事")
-        h_team = st.text_input("🏠 主隊名稱", value="德國")
-        a_team = st.text_input("✈️ 客隊名稱", value="日本")
-        if st.button("創建比賽", use_container_width=True):
-            new_m_id = len(df_matches) + 1
-            new_m = pd.DataFrame([{"match_id": new_m_id, "home_team": h_team, "away_team": a_team, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
-            df_matches = pd.concat([df_matches, new_m], ignore_index=True)
-            save_sheet(df_matches, "Matches")
-            st.toast("建立完成！")
-            time.sleep(1)
-            st.rerun()
-            
-    with st.container(border=True):
-        st.markdown("#### ⚙️ 新增賠率項目")
-        if df_matches.empty:
-            st.markdown("請先創建比賽欄位。")
-        else:
-            match_list = df_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1).tolist()
-            sel_match = st.selectbox("選擇比賽場次", match_list)
-            target_m_id = int(sel_match.split("ID:")[-1].replace(")", ""))
-            
-            p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球"])
-            selection_name = st.text_input("選項名稱 (例:主勝)", value="主勝")
-            odds_val = st.number_input("賠率設定", min_value=1.01, value=2.20, step=0.05)
-            
-            if st.button("儲存賠率項目", use_container_width=True):
-                new_o_id = len(df_odds) + 1
-                new_odd = pd.DataFrame([{"odd_id": new_o_id, "match_id": target_m_id, "play_type": p_type, "selection": selection_name, "odds_value": odds_val}])
-                df_odds = pd.concat([df_odds, new_odd], ignore_index=True)
-                save_sheet(df_odds, "Odds")
-                st.toast("賠率新增成功！")
+# ==================== ⚙️ 管理員獨享：TAB 4 & TAB 5 ====================
+if is_admin:
+    # ==================== TAB 4: 管理後台 ====================
+    with tabs[3]:
+        st.markdown("### ⚙️ 賽事管理與新增")
+        with st.container(border=True):
+            st.markdown("#### ➕ 建立新開盤賽事")
+            h_team = st.text_input("🏠 主隊名稱", value="德國")
+            a_team = st.text_input("✈️ 客隊名稱", value="日本")
+            if st.button("創建比賽", use_container_width=True):
+                new_m_id = len(df_matches) + 1
+                new_m = pd.DataFrame([{"match_id": new_m_id, "home_team": h_team, "away_team": a_team, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
+                df_matches = pd.concat([df_matches, new_m], ignore_index=True)
+                save_sheet(df_matches, "Matches")
+                st.toast("建立完成！")
                 time.sleep(1)
                 st.rerun()
+                
+        with st.container(border=True):
+            st.markdown("#### ⚙️ 新增賠率項目")
+            if df_matches.empty:
+                st.markdown("請先創建比賽欄位。")
+            else:
+                match_list = df_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1).tolist()
+                sel_match = st.selectbox("選擇比賽場次", match_list)
+                target_m_id = int(sel_match.split("ID:")[-1].replace(")", ""))
+                
+                p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球"])
+                selection_name = st.text_input("選項名稱 (例:主勝)", value="主勝")
+                odds_val = st.number_input("賠率設定", min_value=1.01, value=2.20, step=0.05)
+                
+                if st.button("儲存賠率項目", use_container_width=True):
+                    new_o_id = len(df_odds) + 1
+                    new_odd = pd.DataFrame([{"odd_id": new_o_id, "match_id": target_m_id, "play_type": p_type, "selection": selection_name, "odds_value": odds_val}])
+                    df_odds = pd.concat([df_odds, new_odd], ignore_index=True)
+                    save_sheet(df_odds, "Odds")
+                    st.toast("賠率新增成功！")
+                    time.sleep(1)
+                    st.rerun()
 
-# ==================== TAB 5: 完賽結算 ====================
-with tabs[4]:
-    st.markdown("### 🏁 賽果與派彩中心")
-    if df_matches.empty:
-         st.markdown("目前沒有比賽數據。")
-    else:
-        unsettled_matches = df_matches[df_matches["status"] == "未開賽"]
-        if unsettled_matches.empty:
-            st.markdown("### 🎉 太棒了！所有比賽皆已結算完畢。")
+    # ==================== TAB 5: 完賽結算 ====================
+    with tabs[4]:
+        st.markdown("### 🏁 賽果與派彩中心")
+        if df_matches.empty:
+             st.markdown("目前沒有比賽數據。")
         else:
-            with st.container(border=True):
-                sel_unsettled = st.selectbox("📌 選擇準備派彩的完賽場次：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
-                settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
-                
-                st.markdown("⚠️ **重要步驟**：請在下方打勾這場比賽中**『所有贏』**的選項。沒打勾視為未中獎。")
-                match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
-                
-                if match_all_odds.empty:
-                    st.error("此賽事查無賠率。")
-                else:
-                    winning_odds_ids = []
-                    for idx, row in match_all_odds.iterrows():
-                        if st.checkbox(f"[{row['play_type']}] {row['selection']}", key=f"win_{row['odd_id']}"):
-                            winning_odds_ids.append(row['odd_id'])
+            unsettled_matches = df_matches[df_matches["status"] == "未開賽"]
+            if unsettled_matches.empty:
+                st.markdown("### 🎉 太棒了！所有比賽皆已結算完畢。")
+            else:
+                with st.container(border=True):
+                    sel_unsettled = st.selectbox("📌 選擇準備派彩的完賽場次：", unsettled_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
+                    settle_m_id = int(sel_unsettled.split("ID:")[-1].replace(")", ""))
                     
-                    st.markdown("#### 填入最終比分")
-                    sc_home = st.number_input("🏠 主隊比分", min_value=0, value=2)
-                    sc_away = st.number_input("✈️ 客隊比分", min_value=0, value=1)
+                    st.markdown("⚠️ **重要步驟**：請在下方打勾這場比賽中**『所有贏』**的選項。沒打勾視為未中獎。")
+                    match_all_odds = df_odds[df_odds["match_id"] == settle_m_id]
                     
-                    if st.button("📊 確認比分與勾選項，執行派彩", type="primary", use_container_width=True):
-                        with st.spinner('同步資料庫與發放點數中...'):
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = str(sc_home)
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_away"] = str(sc_away)
-                            save_sheet(df_matches, "Matches")
-                            
-                            if not df_details.empty:
-                                df_details.loc[(df_details["match_id"] == settle_m_id) & (df_details["odd_id"].isin(winning_odds_ids)), "status"] = "贏"
-                                df_details.loc[(df_details["match_id"] == settle_m_id) & (~df_details["odd_id"].isin(winning_odds_ids)), "status"] = "輸"
-                                save_sheet(df_details, "BetDetails")
-                            
-                            if not df_bets.empty:
-                                open_bets = df_bets[df_bets["status"] == "未開獎"]
-                                for idx, bet in open_bets.iterrows():
-                                    b_id = bet["bet_id"]
-                                    bet_details = df_details[df_details["bet_id"] == b_id]
-                                    if settle_m_id in bet_details["match_id"].values:
-                                        all_statuses = bet_details["status"].tolist()
-                                        if "輸" in all_statuses:
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "輸"
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = 0.0
-                                        elif "未開獎" not in all_statuses:
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "贏"
-                                            total_odds = 1.0
-                                            for _, detail in bet_details.iterrows():
-                                                total_odds *= float(detail["odds_value"])
-                                            win_amt = round(float(bet["stake"]) * total_odds, 1)
-                                            df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = win_amt
-                                            u_id = bet["user_id"]
-                                            df_users.loc[df_users["user_id"] == u_id, "balance"] += win_amt
-                                save_sheet(df_bets, "Bets")
-                                save_sheet(df_users, "Users")
-                        st.success("🎉 結算完成！贏家點數已撥款。")
-                        time.sleep(1)
-                        st.rerun()
+                    if match_all_odds.empty:
+                        st.error("此賽事查無賠率。")
+                    else:
+                        winning_odds_ids = []
+                        for idx, row in match_all_odds.iterrows():
+                            if st.checkbox(f"[{row['play_type']}] {row['selection']}", key=f"win_{row['odd_id']}"):
+                                winning_odds_ids.append(row['odd_id'])
+                        
+                        st.markdown("#### 填入最終比分")
+                        sc_home = st.number_input("🏠 主隊比分", min_value=0, value=2)
+                        sc_away = st.number_input("✈️ 客隊比分", min_value=0, value=1)
+                        
+                        if st.button("📊 確認比分與勾選項，執行派彩", type="primary", use_container_width=True):
+                            with st.spinner('同步資料庫與發放點數中...'):
+                                df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
+                                df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = str(sc_home)
+                                df_matches.loc[df_matches["match_id"] == settle_m_id, "score_away"] = str(sc_away)
+                                save_sheet(df_matches, "Matches")
+                                
+                                if not df_details.empty:
+                                    df_details.loc[(df_details["match_id"] == settle_m_id) & (df_details["odd_id"].isin(winning_odds_ids)), "status"] = "贏"
+                                    df_details.loc[(df_details["match_id"] == settle_m_id) & (~df_details["odd_id"].isin(winning_odds_ids)), "status"] = "輸"
+                                    save_sheet(df_details, "BetDetails")
+                                
+                                if not df_bets.empty:
+                                    open_bets = df_bets[df_bets["status"] == "未開獎"]
+                                    for idx, bet in open_bets.iterrows():
+                                        b_id = bet["bet_id"]
+                                        bet_details = df_details[df_details["bet_id"] == b_id]
+                                        if settle_m_id in bet_details["match_id"].values:
+                                            all_statuses = bet_details["status"].tolist()
+                                            if "輸" in all_statuses:
+                                                df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "輸"
+                                                df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = 0.0
+                                            elif "未開獎" not in all_statuses:
+                                                df_bets.loc[df_bets["bet_id"] == b_id, "status"] = "贏"
+                                                total_odds = 1.0
+                                                for _, detail in bet_details.iterrows():
+                                                    total_odds *= float(detail["odds_value"])
+                                                win_amt = round(float(bet["stake"]) * total_odds, 1)
+                                                df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = win_amt
+                                                u_id = bet["user_id"]
+                                                df_users.loc[df_users["user_id"] == u_id, "balance"] += win_amt
+                                    save_sheet(df_bets, "Bets")
+                                    save_sheet(df_users, "Users")
+                            st.success("🎉 結算完成！贏家點數已撥款。")
+                            time.sleep(1)
+                            st.rerun()
