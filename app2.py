@@ -214,38 +214,62 @@ with tabs[1]:
     st.markdown("### 🏆 淘汰賽晉級線路圖")
     st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：手機版支援<b>左右滑動瀏覽</b>，卡片底部標註了精確的晉級路徑！</p>", unsafe_allow_html=True)
 
-    round_1_html = ""
-    if not df_matches.empty:
-        for idx, row in df_matches.head(4).iterrows():
-            m_id = row['match_id']
-            home = row['home_team']
-            away = row['away_team']
+    # 🛠️ 動態讀取與生成函式
+    def get_match_card_html(m_id, title_name, next_route_text):
+        if df_matches.empty:
+            return f'<div class="match-card"><div class="match-header"><span>{title_name}</span><span class="status-badge upcoming">未開賽</span></div><div class="team-row"><span class="team-name text-muted">待定</span><span class="team-score">-</span></div><div class="team-row"><span class="team-name text-muted">待定</span><span class="team-score">-</span></div></div>'
+        
+        m_rows = df_matches[df_matches['match_id'] == m_id]
+        if m_rows.empty:
+            home, away, status, s_home, s_away = "待定", "待定", "未開賽", "-", "-"
+        else:
+            row = m_rows.iloc[0]
+            home = row['home_team'] if row['home_team'] else "待定"
+            away = row['away_team'] if row['away_team'] else "待定"
             status = row['status']
-            s_home = row['score_home'] if status == '已結算' else "-"
-            s_away = row['score_away'] if status == '已結算' else "-"
-            
-            if status == "已結算":
-                badge = '<span class="status-badge settled">已完賽</span>'
-            elif status == "進行中":
-                badge = '<span class="status-badge live">LIVE</span>'
-            else:
-                badge = '<span class="status-badge upcoming">未開賽</span>'
-                
-            next_target = "八強 QF1" if m_id in [1, 2] else "八強 QF2"
-            
-            # 注意：這裡刻意不縮排，避免 Streamlit 誤認為是 Code Block
-            round_1_html += f"""
-<div class="match-card">
-<div class="match-header"><span>場次 {m_id}</span>{badge}</div>
-<div class="team-row"><span class="team-name">⚽ {home}</span><span class="team-score">{s_home}</span></div>
-<div class="team-row"><span class="team-name">⚽ {away}</span><span class="team-score">{s_away}</span></div>
-<div class="next-route">➡️ 勝者晉級：{next_target}</div>
-</div>
-"""
-    else:
-        round_1_html = '<div class="match-card"><div class="team-name" style="text-align:center;">⏳ 暫無賽事數據</div></div>'
+            s_home = str(row['score_home']) if status == '已結算' else "-"
+            s_away = str(row['score_away']) if status == '已結算' else "-"
 
-    # 注意：這裡刻意不縮排 HTML 內容
+        if status == "已結算":
+            badge = '<span class="status-badge settled">已完賽</span>'
+        elif status == "進行中":
+            badge = '<span class="status-badge live">LIVE</span>'
+        else:
+            badge = '<span class="status-badge upcoming">未開賽</span>'
+            
+        is_final = (m_id == 8)
+        card_class = "match-card final-card" if is_final else "match-card"
+        if not m_rows.empty and m_id > 4 and status == "未開賽":
+            card_class += " border-gray"
+            
+        header_style = ' style="border-color: #fbbf24;"' if is_final else ''
+        title_style = ' style="color:#fbbf24 !important; font-weight:900;"' if is_final else ''
+        score_style = ' style="color:#fbbf24;"' if is_final else ''
+        
+        # HTML 絕對不可縮排
+        html = f"""
+<div class="{card_class}">
+<div class="match-header"{header_style}><span{title_style}>{title_name}</span>{badge}</div>
+<div class="team-row"><span class="team-name">⚽ {home}</span><span class="team-score"{score_style}>{s_home}</span></div>
+<div class="team-row"><span class="team-name">⚽ {away}</span><span class="team-score"{score_style}>{s_away}</span></div>
+"""
+        if is_final:
+            html += f'<div class="final-winner">{next_route_text}</div></div>'
+        else:
+            html += f'<div class="next-route">{next_route_text}</div></div>'
+        return html
+
+    round_1_html = ""
+    round_1_html += get_match_card_html(1, "場次 1", "➡️ 勝者晉級：八強 QF1")
+    round_1_html += get_match_card_html(2, "場次 2", "➡️ 勝者晉級：八強 QF1")
+    round_1_html += get_match_card_html(3, "場次 3", "➡️ 勝者晉級：八強 QF2")
+    round_1_html += get_match_card_html(4, "場次 4", "➡️ 勝者晉級：八強 QF2")
+
+    qf1_html = get_match_card_html(5, "半準決賽 QF1", "➡️ 勝者晉級：準決賽 SF1")
+    qf2_html = get_match_card_html(6, "半準決賽 QF2", "➡️ 勝者晉級：準決賽 SF1")
+    sf1_html = get_match_card_html(7, "準決賽 SF1", "🏆 勝者前進總決賽")
+    final_html = get_match_card_html(8, "🏆 FINAL 總決賽", "👑 爭奪世界之巔")
+
     bracket_html = f"""
 <div class="bracket-wrapper">
 <div class="bracket-round">
@@ -254,36 +278,16 @@ with tabs[1]:
 </div>
 <div class="bracket-round">
 <div class="round-title">⚡ 八強半準決賽</div>
-<div class="match-card border-gray">
-<div class="match-header"><span>半準決賽 QF1</span><span class="status-badge upcoming">待定</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (Match 1 勝者)</span><span class="team-score">-</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (Match 2 勝者)</span><span class="team-score">-</span></div>
-<div class="next-route">➡️ 勝者晉級：準決賽 SF1</div>
-</div>
-<div class="match-card border-gray">
-<div class="match-header"><span>半準決賽 QF2</span><span class="status-badge upcoming">待定</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (Match 3 勝者)</span><span class="team-score">-</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (Match 4 勝者)</span><span class="team-score">-</span></div>
-<div class="next-route">➡️ 勝者晉級：準決賽 SF1</div>
-</div>
+{qf1_html}
+{qf2_html}
 </div>
 <div class="bracket-round">
 <div class="round-title">🌟 四強準決賽</div>
-<div class="match-card border-gray">
-<div class="match-header"><span>準決賽 SF1</span><span class="status-badge upcoming">待定</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (QF1 勝者)</span><span class="team-score">-</span></div>
-<div class="team-row"><span class="team-name text-muted">待定 (QF2 勝者)</span><span class="team-score">-</span></div>
-<div class="next-route" style="color: #fbbf24 !important;">🏆 勝者前進總決賽</div>
-</div>
+{sf1_html}
 </div>
 <div class="bracket-round">
 <div class="round-title" style="color:#fbbf24;">👑 冠軍總決賽</div>
-<div class="match-card final-card">
-<div class="match-header" style="border-color: #fbbf24;"><span style="color:#fbbf24 !important; font-weight:900;">🏆 FINAL 總決賽</span><span class="status-badge" style="background:#fbbf24; color:#000;">CHAMPION</span></div>
-<div class="team-row" style="margin-top: 5px;"><span class="team-name" style="color:#fff;">🥇 上半區冠軍</span><span class="team-score" style="color:#fbbf24;">-</span></div>
-<div class="team-row"><span class="team-name" style="color:#fff;">🥇 下半區冠軍</span><span class="team-score" style="color:#fbbf24;">-</span></div>
-<div class="final-winner">👑 爭奪世界之巔</div>
-</div>
+{final_html}
 </div>
 </div>
 """
@@ -392,30 +396,71 @@ with tabs[2]:
 # ==================== ⚙️ 管理員獨享：TAB 4 & TAB 5 ====================
 if is_admin:
     with tabs[3]:
-        st.markdown("### ⚙️ 賽事管理與新增")
+        st.markdown("### ⚙️ 賽事管理與後台")
+        
+        # ================= 新增：淘汰賽晉級名單編輯器 =================
+        st.markdown("#### 🏆 淘汰賽晉級名單快速設定")
         with st.container(border=True):
-            st.markdown("#### ➕ 建立新開盤賽事")
-            h_team = st.text_input("🏠 主隊名稱", value="德國")
-            a_team = st.text_input("✈️ 客隊名稱", value="日本")
-            if st.button("創建比賽", use_container_width=True):
-                new_m_id = len(df_matches) + 1
-                new_m = pd.DataFrame([{"match_id": new_m_id, "home_team": h_team, "away_team": a_team, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
-                df_matches = pd.concat([df_matches, new_m], ignore_index=True)
-                save_sheet(df_matches, "Matches")
-                st.toast("建立完成！")
-                time.sleep(1)
-                st.rerun()
+            st.markdown("<p style='font-size:0.85rem; color:#94a3b8;'>👉 在這裡直接輸入各階段的隊伍名稱。按下儲存後，將自動同步到賽況頁面的樹狀圖！(若還不知道隊伍，可保持空白)</p>", unsafe_allow_html=True)
+            
+            with st.form("bracket_update_form"):
+                col1, col2 = st.columns(2)
+                updated_teams = {}
                 
+                match_labels = {
+                    1: "🔥 16強 - 場次 1", 2: "🔥 16強 - 場次 2", 3: "🔥 16強 - 場次 3", 4: "🔥 16強 - 場次 4",
+                    5: "⚡ 八強 QF1 (M1勝 vs M2勝)", 6: "⚡ 八強 QF2 (M3勝 vs M4勝)",
+                    7: "🌟 四強 SF1 (QF1勝 vs QF2勝)", 8: "👑 總決賽 FINAL"
+                }
+                
+                for m_id in range(1, 9):
+                    target_col = col1 if m_id <= 4 else col2
+                    
+                    existing_match = df_matches[df_matches['match_id'] == m_id]
+                    curr_home = str(existing_match.iloc[0]['home_team']) if not existing_match.empty else ""
+                    curr_away = str(existing_match.iloc[0]['away_team']) if not existing_match.empty else ""
+                    
+                    with target_col:
+                        st.markdown(f"**{match_labels[m_id]}**")
+                        h_team = st.text_input(f"🏠 主隊", value=curr_home, key=f"h_{m_id}")
+                        a_team = st.text_input(f"✈️ 客隊", value=curr_away, key=f"a_{m_id}")
+                        updated_teams[m_id] = {"home": h_team, "away": a_team}
+                        st.markdown("<hr style='margin:8px 0; border-color:#334155;'>", unsafe_allow_html=True)
+                        
+                submitted = st.form_submit_button("💾 儲存晉級名單並同步至樹狀圖", type="primary", use_container_width=True)
+                
+                if submitted:
+                    for m_id, teams in updated_teams.items():
+                        h_val = teams['home'].strip()
+                        a_val = teams['away'].strip()
+                        
+                        if not df_matches[df_matches['match_id'] == m_id].empty:
+                            df_matches.loc[df_matches['match_id'] == m_id, 'home_team'] = h_val
+                            df_matches.loc[df_matches['match_id'] == m_id, 'away_team'] = a_val
+                        else:
+                            if h_val or a_val:
+                                new_m = pd.DataFrame([{
+                                    "match_id": m_id, "home_team": h_val, "away_team": a_val, 
+                                    "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""
+                                }])
+                                df_matches = pd.concat([df_matches, new_m], ignore_index=True)
+                    
+                    save_sheet(df_matches, "Matches")
+                    st.toast("✅ 晉級名單已全面更新！", icon="🎉")
+                    time.sleep(1)
+                    st.rerun()
+
+        # ================= 原有功能：新增賠率項目 =================
         with st.container(border=True):
-            st.markdown("#### ⚙️ 新增賠率項目")
+            st.markdown("#### ⚙️ 為賽事新增賠率盤口")
             if df_matches.empty:
-                st.markdown("請先創建比賽欄位。")
+                st.markdown("請先在上方設定賽事。")
             else:
                 match_list = df_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1).tolist()
-                sel_match = st.selectbox("選擇比賽場次", match_list)
+                sel_match = st.selectbox("選擇要開盤的比賽", match_list)
                 target_m_id = int(sel_match.split("ID:")[-1].replace(")", ""))
                 
-                p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球"])
+                p_type = st.selectbox("玩法種類", ["主客和", "讓球盤", "波膽盤", "首名進球", "晉級隊伍"])
                 selection_name = st.text_input("選項名稱 (例:主勝)", value="主勝")
                 odds_val = st.number_input("賠率設定", min_value=1.01, value=2.20, step=0.05)
                 
