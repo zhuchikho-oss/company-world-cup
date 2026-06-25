@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import time
+import requests
+import xml.etree.ElementTree as ET
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -67,15 +69,13 @@ def save_sheet(df, sheet_name):
         st.error(f"❌ 寫入【{sheet_name}】失敗。")
         st.stop()
 
-# ==================== 2. Streamlit 頁面全局設定 (深色高清版) ====================
+# ==================== 2. Streamlit 頁面全局設定 (深色高清 + 樹狀圖 CSS) ====================
 st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="centered")
 
 st.markdown("""
     <style>
     /* 強制全局背景為深海軍藍 */
-    .stApp { 
-        background-color: #0c1328 !important; 
-    }
+    .stApp { background-color: #0c1328 !important; }
     
     /* 標籤、段落與標題改為淺米白色 */
     p, label, h1, h2, h3, h4, h5, h6 {
@@ -103,43 +103,68 @@ st.markdown("""
     }
     .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7 !important; margin-bottom: 5px; } 
     .sub-title { font-size: 1.1rem; color: #fef3c7 !important; font-weight: 800; }
+    hr { border-color: #cbd5e1 !important; }
+
+    /* 📰 新聞卡片 */
+    .news-card {
+        background-color: #1a1f33;
+        border-left: 4px solid #fef3c7;
+        padding: 12px 15px;
+        margin-bottom: 12px;
+        border-radius: 0 8px 8px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .news-title { color: #f8fafc !important; font-weight: 800; font-size: 1.05rem; margin-bottom: 4px; }
+    .news-time { color: #94a3b8 !important; font-size: 0.8rem; }
+
+    /* 🌳 橫向滑動樹狀圖容器 */
+    .tree-container {
+        display: flex;
+        flex-direction: row;
+        overflow-x: auto; 
+        padding-bottom: 20px;
+        gap: 25px;
+        white-space: nowrap;
+    }
+    /* 隱藏捲軸但保留滑動功能 (美化) */
+    .tree-container::-webkit-scrollbar { height: 6px; }
+    .tree-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
     
-    /* 手機版賽程卡片設計 */
-    .bracket-match {
-        background-color: #1a1f33; 
-        padding: 16px;
+    .tree-column {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        gap: 15px;
+        min-width: 160px;
+    }
+    .tree-match {
+        background-color: #1a1f33;
+        border: 2px solid #475569;
         border-radius: 8px;
-        border: 2px solid #fef3c7;
-        margin-bottom: 14px;
+        padding: 10px;
         text-align: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    .bracket-team { font-weight: 900; color: #f8fafc !important; font-size: 1.3rem; } 
-    .bracket-vs { color: #fef3c7 !important; font-size: 1.1rem; margin: 6px 0; font-weight: 900; }
-    
-    /* 分割線顏色變淺 */
-    hr {
-        border-color: #cbd5e1 !important;
-    }
+    .tree-match-title { font-size: 0.8rem; color: #cbd5e1 !important; margin-bottom: 6px; }
+    .tree-team { color: #f8fafc !important; font-weight: 800; font-size: 1.1rem; }
+    .tree-score { color: #fbbf24 !important; font-weight: 900; }
     </style>
     
     <div class="main-banner">
-        <div class="main-title">🏆 2026 世界盃 32強競猜</div>
+        <div class="main-title">🏆 2026 世界盃 競猜中心</div>
         <div class="sub-title">【內部專屬手機高清晰深色版】</div>
     </div>
     """, unsafe_allow_html=True)
 
-# 🚨 核心解決方案三：檢測網址是否有隱藏暗號 `?role=boss`
+# 🚨 隱藏後台邏輯：檢測網址是否有暗號 `?role=boss`
 is_admin = False
 if "role" in st.query_params and st.query_params["role"] == "boss":
     is_admin = True
 
-# 根據是不是管理員，動態決定要顯示哪些分頁
 if is_admin:
-    # 管理員看得到完整的 5 個分頁
-    tabs = st.tabs(["📊 財富排行", "📅 32強賽程", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
+    tabs = st.tabs(["📊 財富排行", "📅 賽程與賽況", "🎲 快速投注", "⚙️ 管理後台", "🏁 完賽結算"])
 else:
-    # 同事只看得到前 3 個普通分頁，後台被完全隱蔽！
-    tabs = st.tabs(["📊 財富排行", "📅 32強賽程", "🎲 快速投注"])
+    tabs = st.tabs(["📊 財富排行", "📅 賽程與賽況", "🎲 快速投注"])
 
 # ==================== 3. 提取雲端數據 ====================
 df_users = read_sheet("Users")
@@ -167,22 +192,103 @@ with tabs[0]:
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})
     st.dataframe(df_ranking[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 32強對陣賽程圖 ====================
+# ==================== TAB 2: 樹狀圖賽程 & 即時新聞 ====================
 with tabs[1]:
-    st.markdown("### 📅 32 強對陣名單")
-    st.markdown("ℹ️ **提示：請點擊下方區塊展開查看對局。**")
-    
-    with st.expander("▶️ 展開：上半區賽事 (A組-D組對陣)", expanded=True):
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇩🇪 德國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇯🇵 日本</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格蘭</div><div class="bracket-vs">VS</div><div class="bracket-team">🇸🇳 塞內加爾</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇫🇷 法國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇺🇸 美國</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇦🇷 阿根廷</div><div class="bracket-vs">VS</div><div class="bracket-team">🇦🇺 澳洲</div></div>', unsafe_allow_html=True)
+    st.markdown("### 📰 最新世界盃動態")
+    with st.expander("📡 點擊展開即時體育新聞 (自動更新)", expanded=True):
+        try:
+            # 抓取 Yahoo Sports Soccer RSS (免 API Key，穩定)
+            response = requests.get("https://sports.yahoo.com/soccer/rss/", timeout=4)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                count = 0
+                for item in root.findall('./channel/item'):
+                    if count >= 4: # 顯示最新 4 條
+                        break
+                    title = item.find('title').text
+                    pubDate = item.find('pubDate').text
+                    # 簡單過濾掉時區字串讓畫面乾淨點
+                    clean_time = pubDate.split(" +")[0].split(" GMT")[0]
+                    st.markdown(f"""
+                    <div class="news-card">
+                        <div class="news-title">⚽ {title}</div>
+                        <div class="news-time">🕒 {clean_time}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    count += 1
+            else:
+                st.markdown("<p style='color:#94a3b8;'>暫時無法取得新聞資料</p>", unsafe_allow_html=True)
+        except Exception:
+            st.markdown("<p style='color:#94a3b8;'>網路連線超時，新聞模組暫停服務</p>", unsafe_allow_html=True)
 
-    with st.expander("▶️ 展開：下半區賽事 (E組-H組對陣)", expanded=False):
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇪🇸 西班牙</div><div class="bracket-vs">VS</div><div class="bracket-team">摩洛哥 🇲🇦</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇵🇹 葡萄牙</div><div class="bracket-vs">VS</div><div class="bracket-team">瑞士 🇨🇭</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇧🇷 巴西</div><div class="bracket-vs">VS</div><div class="bracket-team">南韓 🇰🇷</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇳🇱 荷蘭</div><div class="bracket-vs">VS</div><div class="bracket-team">克羅埃西亞 🇭🇷</div></div>', unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("### 🌳 晉級賽程樹狀圖")
+    st.markdown("<p style='font-size:0.85rem; color:#cbd5e1; margin-top:-10px;'>👉 提示：在手機上請向<b>左/右滑動</b>，查看後續賽程進度。</p>", unsafe_allow_html=True)
+
+    # 動態生成第一輪(16強)的賽事 HTML
+    round_1_html = ""
+    if not df_matches.empty:
+        for idx, row in df_matches.head(4).iterrows(): # 為了排版美觀，先抓前4場作為示範
+            home = row['home_team']
+            away = row['away_team']
+            s_home = row['score_home'] if row['status'] == '已結算' else ""
+            s_away = row['score_away'] if row['status'] == '已結算' else ""
+            display_home = f"{home} <span class='tree-score'>{s_home}</span>" if s_home else home
+            display_away = f"{away} <span class='tree-score'>{s_away}</span>" if s_away else away
+            
+            round_1_html += f"""
+            <div class="tree-match">
+                <div class="tree-match-title">Match {row['match_id']} | {row['status']}</div>
+                <div class="tree-team">{display_home}</div>
+                <hr style="margin:6px 0; border-color:#334155 !important;">
+                <div class="tree-team">{display_away}</div>
+            </div>
+            """
+    else:
+        round_1_html = "<div class='tree-match'><div class='tree-team'>暫無賽事數據</div></div>"
+
+    # 組裝完整的橫向捲動樹狀圖 HTML
+    bracket_html = f"""
+    <div class="tree-container">
+        <div class="tree-column">
+            {round_1_html}
+        </div>
+
+        <div class="tree-column">
+            <div class="tree-match">
+                <div class="tree-match-title">Quarter-Final 1</div>
+                <div class="tree-team">❓ 晉級隊伍</div>
+                <hr style="margin:6px 0; border-color:#334155 !important;">
+                <div class="tree-team">❓ 晉級隊伍</div>
+            </div>
+            <div class="tree-match">
+                <div class="tree-match-title">Quarter-Final 2</div>
+                <div class="tree-team">❓ 晉級隊伍</div>
+                <hr style="margin:6px 0; border-color:#334155 !important;">
+                <div class="tree-team">❓ 晉級隊伍</div>
+            </div>
+        </div>
+
+        <div class="tree-column">
+            <div class="tree-match">
+                <div class="tree-match-title">Semi-Final</div>
+                <div class="tree-team">❓ 待定</div>
+                <hr style="margin:6px 0; border-color:#334155 !important;">
+                <div class="tree-team">❓ 待定</div>
+            </div>
+        </div>
+        
+        <div class="tree-column">
+            <div class="tree-match" style="border-color:#fbbf24; border-width:3px; background-color:#2e2411;">
+                <div class="tree-match-title" style="color:#fbbf24 !important; font-size:0.9rem;">🏆 2026 總決賽</div>
+                <div class="tree-team">👑 待定</div>
+                <hr style="margin:6px 0; border-color:#fbbf24 !important;">
+                <div class="tree-team">👑 待定</div>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(bracket_html, unsafe_allow_html=True)
 
 # ==================== TAB 3: 賽事投注中心 ====================
 with tabs[2]:
@@ -286,7 +392,6 @@ with tabs[2]:
 
 # ==================== ⚙️ 管理員獨享：TAB 4 & TAB 5 ====================
 if is_admin:
-    # ==================== TAB 4: 管理後台 ====================
     with tabs[3]:
         st.markdown("### ⚙️ 賽事管理與新增")
         with st.container(border=True):
@@ -324,7 +429,6 @@ if is_admin:
                     time.sleep(1)
                     st.rerun()
 
-    # ==================== TAB 5: 完賽結算 ====================
     with tabs[4]:
         st.markdown("### 🏁 賽果與派彩中心")
         if df_matches.empty:
