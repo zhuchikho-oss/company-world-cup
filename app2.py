@@ -28,31 +28,39 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=30)  # 🛡️ 升級至 30 秒安全快取，徹底杜絕 Google 429 流量限制
 def read_sheet(sheet_name):
-    """從 Google Sheet 讀取資料（內建解鎖 Streamlit 訊息遮蔽機制）"""
+    """從 Google Sheet 讀取資料並進行嚴格型別校正"""
     try:
         worksheet = sh.worksheet(sheet_name)
         data = worksheet.get_all_records()
+        
+        columns_map = {
+            "Users": ["user_id", "name", "balance"],
+            "Matches": ["match_id", "home_team", "away_team", "status", "score_home", "score_away", "first_goal_player"],
+            "Odds": ["odd_id", "match_id", "play_type", "selection", "odds_value"],
+            "Bets": ["bet_id", "user_id", "bet_mode", "stake", "status", "win_amount"],
+            "BetDetails": ["detail_id", "bet_id", "match_id", "odd_id", "selection", "odds_value", "status"]
+        }
+        
         if not data:
-            columns_map = {
-                "Users": ["user_id", "name", "balance"],
-                "Matches": ["match_id", "home_team", "away_team", "status", "score_home", "score_away", "first_goal_player"],
-                "Odds": ["odd_id", "match_id", "play_type", "selection", "odds_value"],
-                "Bets": ["bet_id", "user_id", "bet_mode", "stake", "status", "win_amount"],
-                "BetDetails": ["detail_id", "bet_id", "match_id", "odd_id", "selection", "odds_value", "status"]
-            }
             return pd.DataFrame(columns=columns_map.get(sheet_name, []))
-        return pd.DataFrame(data)
+            
+        df = pd.DataFrame(data)
+        
+        # ⚡ 主動防禦：強制將可能混雜的欄位轉為純字串，全面封殺 PyArrow TypeError
+        if sheet_name == "Matches":
+            for col in ["score_home", "score_away", "first_goal_player", "status"]:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).replace("nan", "")
+        return df
+        
     except gspread.exceptions.APIError as google_error:
-        # 🔥 強行抓出 Google 的原始報錯，防止 Streamlit 遮蔽
         st.error(f"❌ 讀取分頁【{sheet_name}】時，Google 伺服器返回了錯誤！")
         st.code(f"狀態代碼 (Status Code): {google_error.response.status_code}\n回應內文 (Response): {google_error.response.text}")
-        st.info("💡 提示：如果是 429 錯誤，代表 Google 限制尚未解除，請靜候 2 分鐘再重整網頁。")
         st.stop()
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"❌ 在你的 Google 試算表內，找不到名為【{sheet_name}】的分頁標籤！")
-        st.info("💡 請檢查你的 Google Sheet 底部，分頁名稱是否完全符合：Users, Matches, Odds, Bets, BetDetails (注意大小寫)")
         st.stop()
 
 def save_sheet(df, sheet_name):
@@ -66,7 +74,7 @@ def save_sheet(df, sheet_name):
             worksheet.update(values=data_to_write, range_name="A1")
         else:
             worksheet.update(values=[df.columns.values.tolist()], range_name="A1")
-        st.cache_data.clear()
+        st.cache_data.clear()  # 寫入成功時主動擦除記憶，確保下一秒讀到最新資料
     except gspread.exceptions.APIError as google_error:
         st.error(f"❌ 寫入分頁【{sheet_name}】時，Google 伺服器返回了錯誤！")
         st.code(f"狀態代碼 (Status Code): {google_error.response.status_code}\n回應內文 (Response): {google_error.response.text}")
@@ -311,10 +319,12 @@ with tabs[3]:
                     
                     if st.button("📊 確認賽果，一鍵自動派彩！", type="primary", use_container_width=True):
                         with st.spinner('系統結算中，同時將資料同步至 Google Sheets，請稍候...'):
+                            
+                            # 🚀 🔥 終極型別防護：明確使用 str() 將所有數據轉型為字串，徹底滿足 Pandas PyArrow 檢查
                             df_matches.loc[df_matches["match_id"] == settle_m_id, "status"] = "已結算"
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = sc_home
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_away"] = sc_away
-                            df_matches.loc[df_matches["match_id"] == settle_m_id, "first_goal_player"] = f_goal
+                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_home"] = str(sc_home)
+                            df_matches.loc[df_matches["match_id"] == settle_m_id, "score_away"] = str(sc_away)
+                            df_matches.loc[df_matches["match_id"] == settle_m_id, "first_goal_player"] = str(f_goal)
                             save_sheet(df_matches, "Matches")
                             
                             if not df_details.empty:
