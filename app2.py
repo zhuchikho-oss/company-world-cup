@@ -222,12 +222,11 @@ with tabs[1]:
             home, away, status, s_home, s_away = "待定", "待定", "未開賽", "-", "-"
         else:
             row = m_rows.iloc[0]
-            # 隊伍名稱：有設定就立刻顯示，沒設定就顯示待定
             home = row['home_team'] if str(row['home_team']).strip() != "" else "待定"
             away = row['away_team'] if str(row['away_team']).strip() != "" else "待定"
             status = row['status']
             
-            # 🔥 核心邏輯修改：只有在「已結算」（完賽）的狀態下，才會將比分顯示出來；否則強制顯示 "-"
+            # 只有在「已結算」的狀態下，才會將比分顯示出來；否則強制顯示 "-"
             if status == "已結算":
                 s_home = str(row['score_home']).strip() if str(row['score_home']).strip() != "" else "-"
                 s_away = str(row['score_away']).strip() if str(row['score_away']).strip() != "" else "-"
@@ -530,6 +529,48 @@ if is_admin:
                     st.toast("賠率新增成功！")
                     time.sleep(1)
                     st.rerun()
+
+        # ==================== 🌐 網路賽況半自動同步 (API 串接區) ====================
+        st.markdown("---")
+        st.markdown("#### 🌐 網路賽況半自動同步 (API 串接區)")
+        st.markdown("<p style='font-size:0.85rem; color:#94a3b8;'>點擊下方按鈕，系統將自動模擬從 API 抓取最新比分，並將符合隊伍名單的比賽更新至 Google Sheets。</p>", unsafe_allow_html=True)
+        
+        def fetch_live_scores_from_api():
+            # 💡 未來有真實 API Key 時可替換此處。目前採用模擬數據進行調試：
+            return [
+                {"home_team": "阿根廷", "away_team": "法國", "status": "已結算", "score_home": 3, "score_away": 3},
+                {"home_team": "巴西", "away_team": "德國", "status": "進行中", "score_home": 1, "score_away": 0}
+            ]
+
+        if st.button("🔄 一鍵同步最新賽果與比分", type="primary", use_container_width=True):
+            with st.spinner('連線至全球體育數據庫中...'):
+                try:
+                    live_data = fetch_live_scores_from_api()
+                    update_count = 0
+                    
+                    if not df_matches.empty:
+                        for match_info in live_data:
+                            # 僅針對目前在資料庫中「尚未手動結算」的場次進行更新，防止歷史紀錄被覆寫
+                            mask = (df_matches['home_team'] == match_info['home_team']) & \
+                                   (df_matches['away_team'] == match_info['away_team']) & \
+                                   (df_matches['status'] != '已結算')
+                            
+                            if not df_matches[mask].empty:
+                                m_id = df_matches[mask].iloc[0]['match_id']
+                                df_matches.loc[df_matches["match_id"] == m_id, "score_home"] = str(match_info['score_home'])
+                                df_matches.loc[df_matches["match_id"] == m_id, "score_away"] = str(match_info['score_away'])
+                                df_matches.loc[df_matches["match_id"] == m_id, "status"] = match_info['status']
+                                update_count += 1
+                        
+                        if update_count > 0:
+                            save_sheet(df_matches, "Matches")
+                            st.success(f"✅ 同步成功！已自動更新 {update_count} 場比賽的即時比分與狀態。")
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.info("ℹ️ 目前沒有需要更新的賽事（可能是樹狀圖中的隊伍名稱與 API 資料未對齊，或比賽皆已結算）。")
+                except Exception as e:
+                    st.error(f"❌ 抓取數據失敗，請檢查 API 連線狀態。錯誤代碼: {e}")
 
     with tabs[4]:
         st.markdown("### 🏁 賽果與派彩中心")
