@@ -1,5 +1,3 @@
-# 核心修復點：全局深色背景補丁 (防 TypeError 與防 429 TTL 優化版)
-# 使用方法：全選並覆蓋您 GitHub 裡的整個 app2.py
 import streamlit as st
 import pandas as pd
 import time
@@ -69,25 +67,32 @@ def save_sheet(df, sheet_name):
         st.error(f"❌ 寫入【{sheet_name}】失敗。")
         st.stop()
 
-# ==================== 2. Streamlit 頁面全局設定 (深色主題補丁版) ====================
+# ==================== 2. Streamlit 頁面全局設定 (修復下拉選單隱形問題) ====================
 st.set_page_config(page_title="2026世界盃競猜", page_icon="🏆", layout="centered")
 
 st.markdown("""
     <style>
-    /* 🔥 全局深色主題核心 CSS 🔥 */
-    
     /* 強制全局背景為深海軍藍 */
     .stApp { 
         background-color: #0c1328 !important; 
     }
     
-    /* 所有 Markdown 文字、標籤強制改為淺米白色，並加粗 */
-    div, p, label, span, li {
+    /* 標籤、段落與標題改為淺米白色 */
+    p, label, h1, h2, h3, h4, h5, h6 {
         color: #fef3c7 !important;
         font-weight: 700 !important;
     }
     
-    /* 網頁頂部 Banner 優化：深色背景，淺金色粗框 */
+    /* 🚨 核心修復：讓下拉選單、輸入框內部的字體保持純黑色，避免白底隱形 🚨 */
+    div[data-baseweb="select"] *, 
+    div[role="listbox"] *, 
+    ul[data-baseweb="menu"] *,
+    input {
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+    
+    /* 網頁頂部 Banner 優化 */
     .main-banner {
         background-color: #0c1328;
         padding: 15px;
@@ -96,25 +101,22 @@ st.markdown("""
         text-align: center;
         margin-bottom: 20px;
     }
-    .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7; margin-bottom: 5px; } 
-    .sub-title { font-size: 1.1rem; color: #fef3c7; font-weight: 800; }
+    .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7 !important; margin-bottom: 5px; } 
+    .sub-title { font-size: 1.1rem; color: #fef3c7 !important; font-weight: 800; }
     
-    /* 手機版賽程卡片設計：淺框、淺字 */
+    /* 手機版賽程卡片設計 */
     .bracket-match {
-        background-color: #1a1f33; /* 稍微不同的深色卡片背景 */
+        background-color: #1a1f33; 
         padding: 16px;
         border-radius: 8px;
         border: 2px solid #fef3c7;
         margin-bottom: 14px;
         text-align: center;
     }
-    .bracket-team { font-weight: 900; color: #f8fafc; font-size: 1.3rem; } /* 最醒目的淺色 */
-    .bracket-vs { color: #fef3c7; font-size: 1.1rem; margin: 6px 0; font-weight: 900; }
+    .bracket-team { font-weight: 900; color: #f8fafc !important; font-size: 1.3rem; } 
+    .bracket-vs { color: #fef3c7 !important; font-size: 1.1rem; margin: 6px 0; font-weight: 900; }
     
-    /* 強制所有 Streamlit 自帶標題為淺米白色 */
-    h1, h2, h3, h4 { color: #fef3c7 !important; font-weight: 900 !important; }
-    
-    /* 讓分割線顏色變淺，避免看不見 */
+    /* 分割線顏色變淺 */
     hr {
         border-color: #cbd5e1 !important;
     }
@@ -155,7 +157,7 @@ with tabs[0]:
     df_ranking = df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})
     st.dataframe(df_ranking[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 32強對陣賽程圖 (手機直向排版) ====================
+# ==================== TAB 2: 32強對陣賽程圖 ====================
 with tabs[1]:
     st.markdown("### 📅 32 強對陣名單")
     st.markdown("ℹ️ **提示：請點擊下方區塊展開查看對局。**")
@@ -164,7 +166,7 @@ with tabs[1]:
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇩🇪 德國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇯🇵 日本</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格蘭</div><div class="bracket-vs">VS</div><div class="bracket-team">🇸🇳 塞內加爾</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇫🇷 法國</div><div class="bracket-vs">VS</div><div class="bracket-team">🇺🇸 美國</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="bracket-match"><div class="bracket-team">🇦RG 阿根廷</div><div class="bracket-vs">VS</div><div class="bracket-team">🇦🇺 澳洲</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="bracket-match"><div class="bracket-team">🇦🇷 阿根廷</div><div class="bracket-vs">VS</div><div class="bracket-team">🇦🇺 澳洲</div></div>', unsafe_allow_html=True)
 
     with st.expander("▶️ 展開：下半區賽事 (E組-H組對陣)", expanded=False):
         st.markdown('<div class="bracket-match"><div class="bracket-team">🇪🇸 西班牙</div><div class="bracket-vs">VS</div><div class="bracket-team">摩洛哥 🇲🇦</div></div>', unsafe_allow_html=True)
@@ -197,7 +199,7 @@ with tabs[2]:
                 if match_odds.empty:
                     st.markdown("⚠️ 這場比賽還沒設定賠率！")
                 else:
-                    odds_options = match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ 賠率:{r['odds_value']}", axis=1).tolist()
+                    odds_options = match_odds.apply(lambda r: f"[{r['play_type']}] {r['selection']} @ {r['odds_value']} 倍", axis=1).tolist()
                     selected_odd_str = st.selectbox("🎯 選擇盤口選項：", odds_options)
                     
                     chosen_play_type = selected_odd_str.split("] ")[0].replace("[", "")
@@ -249,7 +251,7 @@ with tabs[2]:
                     total_odds *= float(df_odds[df_odds["odd_id"] == o_id].iloc[0]["odds_value"])
                 
                 st.markdown(f"### 📊 當前組合: **{len(selected_odds_ids)} 串 1**")
-                st.markdown(f"### 📈 總預計賠率: **{total_odds:.2f}**")
+                st.markdown(f"### 📈 總預計賠率: **{total_odds:.2f} 倍**")
                 
                 stake = st.number_input("💵 串關投注金額：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                 
