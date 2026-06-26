@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import time
-import requests
-import xml.etree.ElementTree as ET
+import itertools
+import math
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -56,7 +56,8 @@ def read_sheet(sheet_name):
         for col in id_cols:
             if col in df.columns:
                 df[col] = df[col].apply(clean_id)
-                
+        
+        # 確保特定欄位類型正確
         if sheet_name == "Matches":
             for col in ["score_home", "score_away", "first_goal_player", "status"]:
                 if col in df.columns:
@@ -89,61 +90,52 @@ st.markdown("""
 .stApp { background-color: #0c1328 !important; }
 p, label, h1, h2, h3, h4, h5, h6 { color: #fef3c7 !important; font-weight: 700 !important; }
 div[data-baseweb="select"] *, div[role="listbox"] *, ul[data-baseweb="menu"] *, input {
-    color: #000000 !important; font-weight: 800 !important;
-}
+    color: #000000 !important; font-weight: 800 !important; }
 .main-banner {
     background-color: #0c1328; padding: 15px; border-radius: 8px;
-    border: 2px solid #fef3c7; text-align: center; margin-bottom: 20px;
-}
+    border: 2px solid #fef3c7; text-align: center; margin-bottom: 20px; }
 .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7 !important; margin-bottom: 5px; } 
 .sub-title { font-size: 1.1rem; color: #38bdf8 !important; font-weight: 800; }
 .bracket-wrapper {
-    display: flex; flex-direction: row; overflow-x: auto; padding: 20px 5px; gap: 25px; white-space: nowrap;
-}
+    display: flex; flex-direction: row; overflow-x: auto; padding: 20px 5px; gap: 25px; white-space: nowrap; }
 .bracket-wrapper::-webkit-scrollbar { height: 6px; }
 .bracket-wrapper::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
 .bracket-round { display: flex; flex-direction: column; justify-content: space-around; gap: 20px; min-width: 230px; }
 .round-title {
     font-size: 0.85rem; color: #fef3c7 !important; font-weight: 800; text-align: center;
     background: #1e293b; padding: 6px 12px; border-radius: 20px; border: 1px solid #475569;
-    margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
+    margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 .match-card {
     background: linear-gradient(135deg, #131a35, #1e294b); border: 2px solid #38bdf8;
     border-radius: 12px; padding: 14px; box-shadow: 0 10px 20px rgba(0,0,0,0.4);
-    display: flex; flex-direction: column; gap: 8px;
-}
+    display: flex; flex-direction: column; gap: 8px; }
 .border-gray { border-color: #475569 !important; }
 .final-card {
     border: 3px solid #fbbf24 !important; background: linear-gradient(135deg, #1c1917, #292524) !important;
-    box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
-}
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.3); }
 .match-header {
     display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;
-    color: #94a3b8 !important; border-bottom: 1px solid #334155; padding-bottom: 6px; font-weight: bold;
-}
+    color: #94a3b8 !important; border-bottom: 1px solid #334155; padding-bottom: 6px; font-weight: bold; }
 .team-row { display: flex; justify-content: space-between; align-items: center; }
 .team-name { font-size: 0.95rem; font-weight: 800; color: #f8fafc !important; }
 .text-muted { color: #64748b !important; font-weight: 600; }
 .team-score {
     font-size: 1.05rem; font-weight: 900; color: #fbbf24 !important; background: #0f172a;
-    padding: 2px 10px; border-radius: 6px; min-width: 32px; text-align: center; border: 1px solid #334155;
-}
+    padding: 2px 10px; border-radius: 6px; min-width: 32px; text-align: center; border: 1px solid #334155; }
 .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 900 !important; color: #ffffff !important; }
 .status-badge.settled { background-color: #059669; }
 .status-badge.live { background-color: #dc2626; animation: pulse 1.5s infinite; }
 .status-badge.upcoming { background-color: #475569; }
 .next-route {
     font-size: 0.75rem; color: #38bdf8 !important; background: #0f172a; padding: 4px 8px;
-    border-radius: 6px; text-align: center; font-weight: bold; margin-top: 4px; border: 1px solid #1e293b;
-}
+    border-radius: 6px; text-align: center; font-weight: bold; margin-top: 4px; border: 1px solid #1e293b; }
 .final-winner { font-size: 0.8rem; color: #fbbf24 !important; text-align: center; font-weight: 900; letter-spacing: 0.1em; margin-top: 4px; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 </style>
 
 <div class="main-banner">
 <div class="main-title">🏆 2026 世界盃智能競猜中心</div>
-<div class="sub-title">【多功能自動晉級與全自動過關結算版】</div>
+<div class="sub-title">【馬會複式過關自動拆單精裝版】</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -167,7 +159,6 @@ df_matches = read_sheet("Matches")
 df_bets = read_sheet("Bets")
 df_details = read_sheet("BetDetails")
 
-# 自動前推晉級的核心邏輯函數
 def calculate_next_stage_advancement(current_match_id, winner_name):
     """計算淘汰賽下一場的 ID 以及它是主隊還是客隊，並直接寫入 DataFrame"""
     if not winner_name or winner_name == "待定":
@@ -330,7 +321,7 @@ with tabs[2]:
                         legs_summary.append(f"【{m_text}】[{p_style}] {d_row['selection']}(@{d_row['odds_value']}) [{d_row['status']}]")
                     
                     user_history.append({
-                        "單號": b_id, "模式(過關數)": b_row["bet_mode"], "詳細投注內容": " ✖️ ".join(legs_summary),
+                        "單號": b_id, "模式(公式)": b_row["bet_mode"], "詳細投注內容": " ✖️ ".join(legs_summary),
                         "本金": f"{b_row['stake']} pts", "總狀態": b_row["status"], "已獲積分": f"{b_row['win_amount']} pts"
                     })
                 st.dataframe(pd.DataFrame(user_history), use_container_width=True, hide_index=True)
@@ -340,8 +331,9 @@ with tabs[2]:
     if df_matches.empty or open_matches.empty:
         st.markdown("#### 📭 目前暫時沒有進行中或開放下注的賽事。")
     else:
-        bet_mode = st.radio("🎯 選擇下注模式：", ["單注下注", "過關串關"], horizontal=True)
+        bet_mode = st.radio("🎯 選擇下注模式：", ["單注下注", "馬會複式過關串關"], horizontal=True)
         
+        # 輔助玩法選擇函數
         def render_playstyle_selector(m_row, key_suffix):
             h = m_row['home_team']
             a = m_row['away_team']
@@ -369,7 +361,6 @@ with tabs[2]:
                 target_m_row = df_matches[df_matches['match_id'] == m_id].iloc[0]
                 
                 chosen_style, chosen_selection = render_playstyle_selector(target_m_row, "single")
-                
                 custom_odds = st.number_input("📈 自行填入外部商業盤口賠率：", min_value=1.01, value=2.00, step=0.01, format="%.2f")
                 stake = st.number_input("💵 輸入投注本金：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                 
@@ -393,48 +384,97 @@ with tabs[2]:
                     st.rerun()
                         
         else:
-            st.markdown("#### 🔗 自由過關串關組合")
-            selected_matches = st.multiselect("⚽ 請挑選 2 場以上的比賽進行過關：", open_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
+            st.markdown("#### 🔗 馬會標準複式過關串關中心")
+            selected_matches = st.multiselect("⚽ 請挑選比賽進行過關 (至少選 2 場，最多支援 5 場)：", open_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
+            num_matches = len(selected_matches)
             
-            if len(selected_matches) < 2:
-                st.warning("⚠️ 串關模式至少需要勾選 2 場以上的不同賽事。")
+            if num_matches < 2:
+                st.warning("⚠️ 過關模式至少需要勾選 2 場以上的不同賽事。")
+            elif num_matches > 5:
+                st.error("❌ 為了系統穩定與過關公式匹配，目前最高僅支援 5 場賽事串關。請取消部分選項。")
             else:
-                legs_data = []
-                total_odds = 1.0
+                # 動態推導可用的過關公式
+                def get_available_formulas(n):
+                    formulas = {f"{n}串1": [n]}
+                    if n == 3: formulas.update({"3串3": [2], "3串4": [2, 3], "3串7": [1, 2, 3]})
+                    elif n == 4: formulas.update({"4串4": [3], "4串5": [3, 4], "4串6": [2], "4串11": [2, 3, 4], "4串15": [1, 2, 3, 4]})
+                    elif n == 5: formulas.update({"5串5": [4], "5串6": [4, 5], "5串10": [2], "5串16": [3, 4, 5], "5串26": [2, 3, 4, 5], "5串31": [1, 2, 3, 4, 5]})
+                    return formulas
                 
+                available_rules = get_available_formulas(num_matches)
+                selected_formula = st.selectbox("📏 選擇馬會過關公式：", list(available_rules.keys()))
+                formula_legs = available_rules[selected_formula]
+                
+                legs_data = []
+                st.markdown("---")
+                
+                # 收集各場次資訊
                 for idx, mat_str in enumerate(selected_matches):
                     m_id = clean_id(mat_str.split("ID:")[-1].replace(")", ""))
                     target_m_row = df_matches[df_matches['match_id'] == m_id].iloc[0]
                     with st.container(border=True):
-                        st.markdown(f"**🔥 串關第 {idx+1} 關：{target_m_row['home_team']} VS {target_m_row['away_team']}**")
+                        st.markdown(f"**🔥 賽事 {idx+1}：{target_m_row['home_team']} VS {target_m_row['away_team']}**")
                         chosen_style, chosen_selection = render_playstyle_selector(target_m_row, f"parlay_{m_id}_{idx}")
                         odd = st.number_input(f"填入此場盤口賠率", min_value=1.01, value=2.00, step=0.01, format="%.2f", key=f"parlay_odd_{m_id}_{idx}")
-                        total_odds *= odd
                         legs_data.append({"match_id": m_id, "playstyle": chosen_style, "selection": chosen_selection, "odds_value": odd})
                 
-                st.markdown(f"### 📈 串關總預計賠率: **{total_odds:.2f} 倍**")
-                stake = st.number_input("💵 串關投注總本金：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
+                st.markdown("---")
+                unit_stake = st.number_input("💵 單注投注本金 (Unit Stake)：", min_value=1.0, value=100.0, step=50.0)
                 
-                if st.button("🚀 確認執行過關下單", type="primary", use_container_width=True):
-                    df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
-                    df_users.loc[df_users["user_id"] == u_id, "balance"] -= stake
-                    save_sheet(df_users, "Users")
-                    
-                    new_bet_id = str(int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1)) if not df_bets.empty else "1"
-                    parlay_str = f"{len(legs_data)}串1"  # 顯示幾串幾注
-                    new_bet = pd.DataFrame([{"bet_id": new_bet_id, "user_id": u_id, "bet_mode": parlay_str, "stake": stake, "status": "未開獎", "win_amount": 0.0}])
-                    df_bets = pd.concat([df_bets, new_bet], ignore_index=True)
-                    save_sheet(df_bets, "Bets")
-                    
-                    for leg in legs_data:
-                        new_detail_id = str(int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1)) if not df_details.empty else "1"
-                        new_detail = pd.DataFrame([{"detail_id": new_detail_id, "bet_id": new_bet_id, "match_id": leg["match_id"], "playstyle": leg["playstyle"], "selection": leg["selection"].strip(), "odds_value": float(leg["odds_value"]), "status": "未開獎"}])
-                        df_details = pd.concat([df_details, new_detail], ignore_index=True)
-                    save_sheet(df_details, "BetDetails")
-                    
-                    st.toast("🎉 過關串關下單成功！", icon="🎉")
-                    time.sleep(1)
-                    st.rerun()
+                # 預先計算總注數與總投資額
+                total_bets_count = sum([math.comb(num_matches, l) for l in formula_legs])
+                total_investment = total_bets_count * unit_stake
+                
+                st.info(f"💡 您選擇的公式 **{selected_formula}** 將會拆分成 **{total_bets_count}** 張獨立的子注單。\n**總共將從您的帳戶扣除：{total_investment:.1f} pts**")
+                
+                if st.button("🚀 確認執行複式過關拆單並下注", type="primary", use_container_width=True):
+                    if float(user_row['balance']) < total_investment:
+                        st.error(f"❌ 餘額不足！您的餘額為 {float(user_row['balance']):.1f} pts，但此組合總需 {total_investment:.1f} pts。")
+                    else:
+                        with st.spinner('背景拆單與寫入資料庫中...'):
+                            df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
+                            df_users.loc[df_users["user_id"] == u_id, "balance"] -= total_investment
+                            save_sheet(df_users, "Users")
+                            
+                            current_bet_id = int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1) if not df_bets.empty else 1
+                            current_detail_id = int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1) if not df_details.empty else 1
+                            
+                            new_bets = []
+                            new_details = []
+                            
+                            # 核心拆單引擎：利用 itertools 分拆並獨立存儲
+                            for leg_count in formula_legs:
+                                combos = list(itertools.combinations(legs_data, leg_count))
+                                for combo in combos:
+                                    new_bets.append({
+                                        "bet_id": str(current_bet_id),
+                                        "user_id": u_id,
+                                        "bet_mode": f"{selected_formula} ({leg_count}關)",
+                                        "stake": unit_stake,
+                                        "status": "未開獎",
+                                        "win_amount": 0.0
+                                    })
+                                    for leg in combo:
+                                        new_details.append({
+                                            "detail_id": str(current_detail_id),
+                                            "bet_id": str(current_bet_id),
+                                            "match_id": leg["match_id"],
+                                            "playstyle": leg["playstyle"],
+                                            "selection": leg["selection"].strip(),
+                                            "odds_value": float(leg["odds_value"]),
+                                            "status": "未開獎"
+                                        })
+                                        current_detail_id += 1
+                                    current_bet_id += 1
+                                    
+                            df_bets = pd.concat([df_bets, pd.DataFrame(new_bets)], ignore_index=True)
+                            df_details = pd.concat([df_details, pd.DataFrame(new_details)], ignore_index=True)
+                            save_sheet(df_bets, "Bets")
+                            save_sheet(df_details, "BetDetails")
+                            
+                        st.toast(f"🎉 {selected_formula} 複式拆單成功！共生成 {total_bets_count} 注。", icon="🎉")
+                        time.sleep(1.5)
+                        st.rerun()
 
 # ==================== ⚙️ TAB 4: 管理後台 ====================
 if is_admin:
@@ -624,4 +664,3 @@ if is_admin:
                         st.success(f"🎉 結算完畢！過關單已自動相乘派彩，【{advance_winner}】也已順利送入下一輪。")
                         time.sleep(1.2)
                         st.rerun()
-
