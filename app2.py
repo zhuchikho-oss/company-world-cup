@@ -197,6 +197,8 @@ def calculate_next_stage_advancement(current_match_id, winner_name):
 # ==================== TAB 1: 資產排行榜 ====================
 with tabs[0]:
     st.markdown("### 📈 財富龍虎榜")
+    # 確保 balance 欄位為數值型別，防止排序錯誤
+    df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce").fillna(0)
     df_ranking = df_users.sort_values(by="balance", ascending=False).reset_index(drop=True)
     if len(df_ranking) >= 3:
         st.markdown(f"#### 🥇 榜首：{df_ranking.iloc[0]['name']} — **{df_ranking.iloc[0]['balance']:.1f} pts**")
@@ -298,14 +300,14 @@ with tabs[2]:
         active_user = st.selectbox("👤 請選擇你的名字（身分）：", df_users["name"].tolist())
         user_row = df_users[df_users["name"] == active_user].iloc[0]
         u_id = user_row["user_id"]
-        st.markdown(f"### 💰 你的可用積分：**{user_row['balance']:.1f} pts**")
+        st.markdown(f"### 💰 你的可用積分：**{float(user_row['balance']):.1f} pts**")
         
     # 同事專屬歷史投注紀錄看板
     with st.expander("📜 查看我的歷史投注紀錄與派彩狀態", expanded=False):
         if df_bets.empty or df_details.empty:
             st.info("您目前沒有任何下注歷史。")
         else:
-            my_bets = df_bets[df_bets["user_id"] == u_id]
+            my_bets = df_bets[df_bets["user_id"].astype(str) == str(u_id)]
             if my_bets.empty:
                 st.info("您目前沒有任何下注歷史。")
             else:
@@ -368,7 +370,9 @@ with tabs[2]:
                 stake = st.number_input("💵 輸入投注本金：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                 
                 if st.button("📱 確認送出單注", type="primary", use_container_width=True):
-                    df_users.loc[df_users["user_id"] == u_id, "balance"] -= stake
+                    # 確保類型正確後扣款
+                    df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
+                    df_users.loc[df_users["user_id"].astype(str) == str(u_id), "balance"] -= stake
                     save_sheet(df_users, "Users")
                     
                     new_bet_id = int(df_bets["bet_id"].max() + 1) if not df_bets.empty else 1
@@ -409,7 +413,9 @@ with tabs[2]:
                 stake = st.number_input("💵 串關投注總本金：", min_value=1.0, max_value=float(user_row['balance']), value=100.0, step=50.0)
                 
                 if st.button("🚀 確認執行過關下單", type="primary", use_container_width=True):
-                    df_users.loc[df_users["user_id"] == u_id, "balance"] -= stake
+                    # 確保類型正确後扣款
+                    df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
+                    df_users.loc[df_users["user_id"].astype(str) == str(u_id), "balance"] -= stake
                     save_sheet(df_users, "Users")
                     
                     new_bet_id = int(df_bets["bet_id"].max() + 1) if not df_bets.empty else 1
@@ -546,7 +552,7 @@ if is_admin:
                     display_list = []
                     for idx, d_row in pending_details.iterrows():
                         b_rows = df_bets[df_bets["bet_id"] == d_row["bet_id"]]
-                        u_name = df_users[df_users["user_id"] == b_rows.iloc[0]["user_id"]].iloc[0]["name"] if not b_rows.empty else "未知"
+                        u_name = df_users[df_users["user_id"].astype(str) == str(b_rows.iloc[0]["user_id"])].iloc[0]["name"] if not b_rows.empty else "未知"
                         display_list.append({
                             "detail_id": d_row["detail_id"], "員工姓名": u_name,
                             "下注玩法種類": d_row.get("playstyle", "常規"), "他的自訂投注內容": d_row["selection"],
@@ -605,8 +611,10 @@ if is_admin:
                                         win_amt = round(float(bet["stake"]) * total_odds, 1)
                                         df_bets.loc[df_bets["bet_id"] == b_id, "win_amount"] = win_amt
                                         
-                                        u_id = bet["user_id"]
-                                        df_users.loc[df_users["user_id"] == u_id, "balance"] += win_amt
+                                        # 🎯 【修復重點】：強制對齊 ID 型態並確保餘額是數字
+                                        u_id = str(bet["user_id"]).strip()
+                                        df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
+                                        df_users.loc[df_users["user_id"].astype(str) == u_id, "balance"] += win_amt
                                         
                                 save_sheet(df_bets, "Bets")
                                 save_sheet(df_users, "Users")
