@@ -5,6 +5,13 @@ import itertools
 import gspread
 from google.oauth2.service_account import Credentials
 
+# 為了徹底防止 Pandas 與 Google Sheets 間的型態問題，建立全域清理函數
+def clean_id(x):
+    s = str(x).strip()
+    if s.endswith('.0'):
+        return s[:-2]
+    return s
+
 # ==================== 1. 初始化 Google Sheets 資料庫 ====================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagDHclyeNJiRffTbB1E/edit?gid=0#gid=0"
 
@@ -43,6 +50,12 @@ def read_sheet(sheet_name):
             
         df = pd.DataFrame(data)
         
+        # 強制清理所有 ID 欄位，保證後續運算 100% 精準匹配
+        id_cols = ["user_id", "match_id", "bet_id", "detail_id"]
+        for col in id_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(clean_id)
+                
         if sheet_name == "Matches":
             for col in ["score_home", "score_away", "first_goal_player", "status"]:
                 if col in df.columns:
@@ -136,7 +149,7 @@ def get_parlay_combinations(n_legs, mode_str):
 
 def evaluate_bet_payout(bet_mode, stake, legs_info):
     """計算整張注單 (包含複式過關) 的最終派彩"""
-    # legs_info format: [{"status": "贏", "odds": 1.85}, ...]
+    # 如果有任何一場未開獎，代表大單還不能結算
     if any(leg["status"] == "未開獎" for leg in legs_info):
         return "未開獎", 0.0
 
@@ -161,6 +174,36 @@ def evaluate_bet_payout(bet_mode, stake, legs_info):
         return "贏", round(total_win, 1)
     else:
         return "輸", 0.0
+
+def calculate_next_stage_advancement(current_match_id, winner_name):
+    """計算淘汰賽下一場的 ID 以及它是主隊還是客隊，並直接寫入 DataFrame"""
+    if not winner_name or winner_name == "待定": return
+    next_id = None
+    is_home = True
+    c_id = int(current_match_id)
+    
+    if 1 <= c_id <= 16:
+        next_id = 17 + (c_id - 1) // 2
+        is_home = (c_id % 2 != 0)
+    elif 17 <= c_id <= 24:
+        next_id = 25 + (c_id - 17) // 2
+        is_home = (c_id % 2 != 0)
+    elif 25 <= c_id <= 28:
+        next_id = 29 + (c_id - 25) // 2
+        is_home = (c_id % 2 != 0)
+    elif 29 <= c_id <= 30:
+        next_id = 31
+        is_home = (c_id == 29)
+        
+    if next_id:
+        global df_matches
+        mask = df_matches['match_id'].astype(str) == str(next_id)
+        if not df_matches[mask].empty:
+            if is_home: df_matches.loc[mask, 'home_team'] = winner_name
+            else: df_matches.loc[mask, 'away_team'] = winner_name
+        else:
+            new_m = { "match_id": str(next_id), "home_team": winner_name if is_home else "", "away_team": "" if is_home else winner_name, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": "" }
+            df_matches = pd.concat([df_matches, pd.DataFrame([new_m])], ignore_index=True)
 
 
 # ==================== 3. Streamlit 頁面全局視覺設定 ====================
@@ -229,34 +272,16 @@ if is_admin:
 else:
     tabs = st.tabs(["📊 財富排行", "📅 賽況樹狀圖", "🎲 快速投注"])
 
-def calculate_next_stage_advancement(current_match_id, winner_name):
-    if not winner_name or winner_name == "待定": return
-    next_id = None
-    is_home = True
-    c_id = int(current_match_id)
-    
-    if 1 <= c_id <= 16:
-        next_id = 17 + (c_id - 1) // 2
-        is_home = (c_id % 2 != 0)
-    elif 17 <= c_id <= 24:
-        next_id = 25 + (c_id - 17) // 2
-        is_home = (c_id % 2 != 0)
-    elif 25 <= c_id <= 28:
-        next_id = 29 + (c_id - 25) // 2
-        is_home = (c_id % 2 != 0)
-    elif 29 <= c_id <= 30:
-        next_id = 31
-        is_home = (c_id == 29)
-        
-    if next_id:
-        global df_matches
-        mask = df_matches['match_id'].astype(str) == str(next_id)
-        if not df_matches[mask].empty:
-            if is_home: df_matches.loc[mask, 'home_team'] = winner_name
-            else: df_matches.loc[mask, 'away_team'] = winner_name
-        else:
-            new_m = { "match_id": next_id, "home_team": winner_name if is_home else "", "away_team": "" if is_home else winner_name, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": "" }
-            df_matches = pd.concat([df_matches, pd.DataFrame([new_m])], ignore_index=True)
+# ==================== 4. 提取與初始化資料 (修復點) ====================
+df_users = read_sheet("Users")
+if df_users.empty:
+    df_users = pd.DataFrame({"user_id": [str(i) for i in range(1, 11)], "name": [f"同事 {i}" for i in range(1, 11)], "balance": [2000.0] * 10})
+    save_sheet(df_users, "Users")
+
+df_matches = read_sheet("Matches")
+df_bets = read_sheet("Bets")
+df_details = read_sheet("BetDetails")
+
 
 # ==================== TAB 1: 資產排行榜 ====================
 with tabs[0]:
@@ -337,7 +362,7 @@ with tabs[2]:
     with st.container(border=True):
         active_user = st.selectbox("👤 請選擇你的名字（身分）：", df_users["name"].tolist())
         user_row = df_users[df_users["name"] == active_user].iloc[0]
-        u_id = user_row["user_id"]
+        u_id = clean_id(user_row["user_id"])
         st.markdown(f"### 💰 你的可用積分：**{float(user_row['balance']):.1f} pts**")
         
     with st.expander("📜 查看我的歷史投注紀錄與派彩狀態", expanded=False):
@@ -383,7 +408,7 @@ with tabs[2]:
         if bet_mode == "單注下注":
             with st.container(border=True):
                 selected_match = st.selectbox("⚽ 選擇比賽場次：", open_matches.apply(lambda r: f"{r['home_team']} VS {r['away_team']} (ID:{r['match_id']})", axis=1))
-                m_id = int(selected_match.split("ID:")[-1].replace(")", ""))
+                m_id = clean_id(selected_match.split("ID:")[-1].replace(")", ""))
                 target_m_row = df_matches[df_matches['match_id'].astype(str) == str(m_id)].iloc[0]
                 chosen_style, chosen_selection = render_playstyle_selector(target_m_row, "single")
                 custom_odds = st.number_input("📈 自行填入外部商業盤口賠率：", min_value=1.01, value=2.00, step=0.01, format="%.2f")
@@ -393,11 +418,11 @@ with tabs[2]:
                     df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
                     df_users.loc[df_users["user_id"].astype(str) == str(u_id), "balance"] -= stake
                     save_sheet(df_users, "Users")
-                    new_bet_id = int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1) if not df_bets.empty else 1
+                    new_bet_id = str(int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1)) if not df_bets.empty else "1"
                     new_bet = pd.DataFrame([{"bet_id": new_bet_id, "user_id": u_id, "bet_mode": "單注", "stake": stake, "status": "未開獎", "win_amount": 0.0}])
                     df_bets = pd.concat([df_bets, new_bet], ignore_index=True)
                     save_sheet(df_bets, "Bets")
-                    new_detail_id = int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1) if not df_details.empty else 1
+                    new_detail_id = str(int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1)) if not df_details.empty else "1"
                     new_detail = pd.DataFrame([{"detail_id": new_detail_id, "bet_id": new_bet_id, "match_id": m_id, "playstyle": chosen_style, "selection": chosen_selection.strip(), "odds_value": custom_odds, "status": "未開獎"}])
                     df_details = pd.concat([df_details, new_detail], ignore_index=True)
                     save_sheet(df_details, "BetDetails")
@@ -422,7 +447,7 @@ with tabs[2]:
                 sel_formula = st.selectbox("🎯 選擇過關公式：", get_available_formulas(n_legs))
                 legs_data = []
                 for idx, mat_str in enumerate(selected_matches):
-                    m_id = int(mat_str.split("ID:")[-1].replace(")", ""))
+                    m_id = clean_id(mat_str.split("ID:")[-1].replace(")", ""))
                     target_m_row = df_matches[df_matches['match_id'].astype(str) == str(m_id)].iloc[0]
                     with st.container(border=True):
                         st.markdown(f"**🔥 串關第 {idx+1} 關：{target_m_row['home_team']} VS {target_m_row['away_team']}**")
@@ -436,12 +461,12 @@ with tabs[2]:
                     df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce")
                     df_users.loc[df_users["user_id"].astype(str) == str(u_id), "balance"] -= stake
                     save_sheet(df_users, "Users")
-                    new_bet_id = int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1) if not df_bets.empty else 1
+                    new_bet_id = str(int(pd.to_numeric(df_bets["bet_id"], errors='coerce').max() + 1)) if not df_bets.empty else "1"
                     new_bet = pd.DataFrame([{"bet_id": new_bet_id, "user_id": u_id, "bet_mode": sel_formula, "stake": stake, "status": "未開獎", "win_amount": 0.0}])
                     df_bets = pd.concat([df_bets, new_bet], ignore_index=True)
                     save_sheet(df_bets, "Bets")
                     for leg in legs_data:
-                        new_detail_id = int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1) if not df_details.empty else 1
+                        new_detail_id = str(int(pd.to_numeric(df_details["detail_id"], errors='coerce').max() + 1)) if not df_details.empty else "1"
                         new_detail = pd.DataFrame([{"detail_id": new_detail_id, "bet_id": new_bet_id, "match_id": leg["match_id"], "playstyle": leg["playstyle"], "selection": leg["selection"].strip(), "odds_value": leg["odds_value"], "status": "未開獎"}])
                         df_details = pd.concat([df_details, new_detail], ignore_index=True)
                     save_sheet(df_details, "BetDetails")
@@ -489,7 +514,7 @@ if is_admin:
                     if st.form_submit_button("➕ 發布新賽事", type="primary", use_container_width=True):
                         if not df_matches[df_matches['match_id'].astype(str) == str(custom_id)].empty: st.error("❌ ID 已經存在")
                         else:
-                            new_m = pd.DataFrame([{"match_id": custom_id, "home_team": add_home.strip(), "away_team": add_away.strip(), "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
+                            new_m = pd.DataFrame([{"match_id": str(custom_id), "home_team": add_home.strip(), "away_team": add_away.strip(), "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])
                             df_matches = pd.concat([df_matches, new_m], ignore_index=True)
                             save_sheet(df_matches, "Matches")
                             st.toast("✅ 成功新增賽事！", icon="🎉")
@@ -499,7 +524,7 @@ if is_admin:
 if is_admin:
     with tabs[4]:
         st.markdown("### 🏁 賽果登錄與全自動對獎中心")
-        st.info("💡 **全新智慧結算**：您現在只需輸入最終比分，系統將會**自動校對**所有員工的單注與大小球/讓分盤，並進行**過關容錯派彩計算**，無需再手動點選輸贏！")
+        st.info("💡 **全新智慧結算**：您現在只需輸入最終比分，系統將會**自動校對**所有員工的單注與過關盤，並進行**過關容錯派彩計算**，無需再手動點選輸贏！")
         
         unsettled_matches = df_matches[df_matches["status"] != "已結算"]
         if unsettled_matches.empty:
@@ -514,7 +539,7 @@ if is_admin:
                 c_sc1, c_sc2, c_sc3 = st.columns(3)
                 sc_home = c_sc1.number_input("🏠 主隊最終進球數", min_value=0, value=0)
                 sc_away = c_sc2.number_input("✈️ 客隊最終進球數", min_value=0, value=0)
-                fg_player = c_sc3.text_input("⚽ 首名進球球員名字（若無進球請填：無）", value="梅西")
+                fg_player = c_sc3.text_input("⚽ 首名進球球員名字（若無進球請填：無）", value="無")
                 
                 st.markdown("#### 🏆 2. 設定此場淘汰賽最終晉級者（樹狀圖前推用）：")
                 team_choices = []
