@@ -270,7 +270,7 @@ with tabs[1]:
             .bracket-wrapper {{
                 display: flex;
                 flex-direction: row;
-                justify-content: center;
+                justify(content: center);
                 gap: 15px;
                 padding: 10px 5px;
                 white-space: nowrap;
@@ -393,9 +393,10 @@ with tabs[1]:
         settled_m = df_matches[df_matches["status"].str.contains("結算", na=False)]
         for _, row in settled_m.iterrows():
             try:
-                sh, sa = int(float(row["score_home"])), int(float(row["score_away"]))
-                if sh > sa: eliminated_teams.add(str(row["away_team"]))
-                elif sa > sh: eliminated_teams.add(str(row["home_team"]))
+                # 🛠️ 修正處：將原本命名為 sh, sa 的變數改名，避免覆蓋掉全域資料庫連線物件 sh 
+                h_score_val, a_score_val = int(float(row["score_home"])), int(float(row["score_away"]))
+                if h_score_val > a_score_val: eliminated_teams.add(str(row["away_team"]))
+                elif a_score_val > h_score_val: eliminated_teams.add(str(row["home_team"]))
             except: pass
         alive_teams = list(all_teams - eliminated_teams)
         active_m = df_matches[df_matches["status"].isin(["未開賽", "進行中"])]
