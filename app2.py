@@ -234,7 +234,7 @@ div[data-baseweb="select"] *, div[role="listbox"] *, ul[data-baseweb="menu"] *, 
 """, unsafe_allow_html=True)
 
 is_admin = ("role" in st.query_params and st.query_params["role"] == "boss")
-tabs = st.tabs(["📊 財富排行", "📅 賽況樹狀圖", "🎲 快速投注", "⚙️ 賽事管理後台", "🏁 完賽自動結算"] if is_admin else ["📊 財富排行", "📅 賽況樹狀圖", "🎲 快速投注"])
+tabs = st.tabs(["📊 財富排行", "📅 賽況樹狀圖", "🎲 快速投注", "⚙️ 賽事管理後台", "📝 投注管理後台", "🏁 完賽自動結算"] if is_admin else ["📊 財富排行", "📅 賽況樹狀圖", "🎲 快速投注"])
 
 df_users = read_sheet("Users")
 if df_users.empty:
@@ -386,7 +386,7 @@ with tabs[2]:
                     save_sheet(df_users, "Users"); save_sheet(df_bets, "Bets"); save_sheet(df_details, "BetDetails")
                     st.toast("🎉 串關成功！", icon="🎉"); time.sleep(1); st.rerun()
 
-# ==================== TAB 4: 管理後台 ====================
+# ==================== TAB 4: 賽事管理後台 ====================
 if is_admin:
     with tabs[3]:
         st.markdown("### ⚙️ 賽事名單增刪管理後台")
@@ -411,9 +411,90 @@ if is_admin:
                     df_matches = pd.concat([df_matches, pd.DataFrame([{"match_id": str(nid), "home_team": h, "away_team": a, "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""}])], ignore_index=True)
                     save_sheet(df_matches, "Matches"); st.toast("✅ 成功新增賽事！", icon="🎉"); time.sleep(1); st.rerun()
 
-# ==================== TAB 5: 全自動對獎與派彩中心 ====================
+# ==================== TAB 5: 投注管理後台 (新功能) ====================
 if is_admin:
     with tabs[4]:
+        st.markdown("### 📝 投注管理後台")
+        st.info("管理員可以在此修改未開獎的注單（調整本金、修改賠率），或直接作廢注單並退款給員工。")
+        
+        open_bets = df_bets[df_bets["status"].str.contains("未開獎", na=False)] if not df_bets.empty else pd.DataFrame()
+        
+        if open_bets.empty:
+            st.warning("目前沒有「未開獎」的注單可供管理。")
+        else:
+            with st.container(border=True):
+                # 建立下拉選單讓管理員選擇注單
+                bet_options = open_bets.apply(
+                    lambda r: f"單號: {r['bet_id']} | 員工: {df_users[df_users['user_id'].astype(str) == str(r['user_id'])]['name'].iloc[0] if not df_users[df_users['user_id'].astype(str) == str(r['user_id'])].empty else '未知'} | 模式: {r['bet_mode']} | 本金: {r['stake']}", axis=1
+                )
+                selected_bet_str = st.selectbox("🔍 選擇要管理的注單", bet_options.tolist())
+                sel_b_id = selected_bet_str.split("單號: ")[1].split(" |")[0]
+                
+                target_bet = open_bets[open_bets["bet_id"].astype(str) == sel_b_id].iloc[0]
+                target_details = df_details[df_details["bet_id"].astype(str) == sel_b_id]
+                bet_u_id = str(target_bet["user_id"]).strip()
+                
+                manage_action = st.radio("🛠️ 執行動作：", ["✏️ 修改本金與賠率", "🗑️ 刪除注單並退還本金"], horizontal=True)
+                
+                st.markdown("---")
+                
+                if manage_action == "✏️ 修改本金與賠率":
+                    with st.form("edit_bet_form"):
+                        new_stake = st.number_input("💵 修改投注本金 ( pts )", min_value=1.0, value=float(target_bet["stake"]), step=50.0)
+                        
+                        st.markdown("**📊 修改各關卡賠率**")
+                        new_odds_dict = {}
+                        for idx, d_row in target_details.iterrows():
+                            m_row = df_matches[df_matches["match_id"].astype(str) == str(d_row["match_id"])]
+                            m_text = f"{m_row.iloc[0]['home_team']} VS {m_row.iloc[0]['away_team']}" if not m_row.empty else f"場次ID:{d_row['match_id']}"
+                            label = f"M{d_row['match_id']}【{m_text}】 {d_row['playstyle']} - {d_row['selection']}"
+                            new_odds_dict[d_row["detail_id"]] = st.number_input(label, min_value=1.01, value=float(d_row["odds_value"]), step=0.01, key=f"odd_{d_row['detail_id']}")
+                            
+                        if st.form_submit_button("💾 確認儲存修改", type="primary"):
+                            diff = new_stake - float(target_bet["stake"])
+                            df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce").fillna(0.0)
+                            user_bal = df_users.loc[df_users["user_id"].astype(str) == bet_u_id, "balance"].values[0]
+                            
+                            # 若調高本金，需檢查餘額是否足夠
+                            if diff > 0 and user_bal < diff:
+                                st.error(f"❌ 該員工餘額不足以增加本金！(尚需 {diff} pts，但帳戶僅剩 {user_bal} pts)")
+                            else:
+                                # 扣除或退還本金差額
+                                df_users.loc[df_users["user_id"].astype(str) == bet_u_id, "balance"] -= diff
+                                # 更新本金
+                                df_bets.loc[df_bets["bet_id"].astype(str) == sel_b_id, "stake"] = new_stake
+                                # 更新每一關的賠率
+                                for d_id, nv in new_odds_dict.items():
+                                    df_details.loc[df_details["detail_id"].astype(str) == str(d_id), "odds_value"] = nv
+                                    
+                                save_sheet(df_users, "Users")
+                                save_sheet(df_bets, "Bets")
+                                save_sheet(df_details, "BetDetails")
+                                st.toast("✅ 注單本金與賠率修改成功！", icon="✅")
+                                time.sleep(1)
+                                st.rerun()
+                                
+                elif manage_action == "🗑️ 刪除注單並退還本金":
+                    st.warning("⚠️ 確定要作廢此注單，並將本金全額退還給該員工嗎？此動作無法復原。")
+                    if st.button("🗑️ 確認刪除並退款", type="primary"):
+                        df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce").fillna(0.0)
+                        # 退還本金給員工
+                        df_users.loc[df_users["user_id"].astype(str) == bet_u_id, "balance"] += float(target_bet["stake"])
+                        
+                        # 刪除注單主檔與明細檔
+                        df_bets = df_bets[df_bets["bet_id"].astype(str) != sel_b_id]
+                        df_details = df_details[df_details["bet_id"].astype(str) != sel_b_id]
+                        
+                        save_sheet(df_users, "Users")
+                        save_sheet(df_bets, "Bets")
+                        save_sheet(df_details, "BetDetails")
+                        st.toast("🗑️ 注單已成功作廢，本金已退還！", icon="✅")
+                        time.sleep(1)
+                        st.rerun()
+
+# ==================== TAB 6: 全自動對獎與派彩中心 ====================
+if is_admin:
+    with tabs[5]:
         st.markdown("### 🏁 賽果登錄與全自動結算中心")
         st.info("💡 **一鍵智能派彩**：您不需手動判定注單！只需輸入最終比分，系統將自動校對所有玩法，並根據馬會規則執行「過關容錯派彩計算」，同時將獲勝隊伍自動前推晉級！")
         
@@ -454,9 +535,11 @@ if is_admin:
                         # 4. 進行過關容錯總結算 (Bet)
                         if not df_bets.empty:
                             df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce").fillna(0.0)
-                            for i, bet in df_bets[df_bets["status"] == "未開獎"].iterrows():
+                            unsettled_bets = df_bets[df_bets["status"].str.contains("未開獎|未開獎", na=False)]
+                            
+                            for i, bet in unsettled_bets.iterrows():
                                 legs = df_details[df_details["bet_id"].astype(str) == str(bet["bet_id"])]
-                                if not legs.empty and not any(legs["status"] == "未開獎"):  # 該單全部賽事都開獎了才結算
+                                if not legs.empty and not legs["status"].str.contains("未開獎").any():  # 該單全部賽事都開獎了才結算
                                     infos = [{"status": r["status"], "odds": float(r["odds_value"])} for _, r in legs.iterrows()]
                                     ns, amt = evaluate_bet_payout(bet["bet_mode"], float(bet["stake"]), infos)
                                     df_bets.loc[i, ["status", "win_amount"]] = [ns, amt]
