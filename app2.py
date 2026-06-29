@@ -12,7 +12,8 @@ def clean_id(x):
     if s.endswith('.0'): return s[:-2]
     return s
 
-# 32強 (Round of 32) 完整初始賽程 (M1 ~ M31)
+# 32強 (Round of 32) 完整對稱初始賽程 (M1 ~ M31)
+# M1~M8 位於左半區，M9~M16 位於右半區，完美對應官方結構
 INITIAL_MATCHES = [
     {"match_id": "1", "home_team": "Germany", "away_team": "Paraguay", "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""},
     {"match_id": "2", "home_team": "France", "away_team": "Sweden", "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""},
@@ -186,7 +187,7 @@ def evaluate_bet_payout(bet_mode, stake, legs_info):
     return ("贏", round(total_win, 1)) if total_win > 0 else ("輸", 0.0)
 
 # ==================== 3. 系統初始化與 UI 設定 ====================
-st.set_page_config(page_title="2026世界盃競猜系統", page_icon="🏆", layout="centered")
+st.set_page_config(page_title="2026世界盃競猜系統", page_icon="🏆", layout="wide") # 改為 wide 佈局更適合看左右雙向樹狀圖
 st.markdown("""
 <style>
 .stApp { background-color: #0c1328 !important; }
@@ -194,26 +195,32 @@ p, label, h1, h2, h3, h4, h5, h6 { color: #fef3c7 !important; font-weight: 700 !
 div[data-baseweb="select"] *, div[role="listbox"] *, ul[data-baseweb="menu"] *, input { color: #000000 !important; font-weight: 800 !important; }
 .main-banner { background-color: #0c1328; padding: 15px; border-radius: 8px; border: 2px solid #fef3c7; text-align: center; margin-bottom: 20px; }
 .main-title { font-size: 1.8rem; font-weight: 900; color: #fef3c7 !important; margin-bottom: 5px; } 
-.bracket-wrapper { display: flex; flex-direction: row; overflow-x: auto; padding: 20px 5px; gap: 25px; white-space: nowrap; }
+
+/* 雙向包夾樹狀圖核心 CSS 滾動條 */
+.bracket-wrapper { display: flex; flex-direction: row; justify-content: center; overflow-x: auto; padding: 20px 5px; gap: 15px; white-space: nowrap; }
 .bracket-wrapper::-webkit-scrollbar { height: 6px; }
 .bracket-wrapper::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-.bracket-round { display: flex; flex-direction: column; justify-content: space-around; gap: 20px; min-width: 230px; }
-.round-title { font-size: 0.85rem; color: #fef3c7 !important; font-weight: 800; text-align: center; background: #1e293b; padding: 6px 12px; border-radius: 20px; border: 1px solid #475569; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-.match-card { background: linear-gradient(135deg, #131a35, #1e294b); border: 2px solid #38bdf8; border-radius: 12px; padding: 14px; box-shadow: 0 10px 20px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 8px; }
-.border-gray { border-color: #475569 !important; opacity: 0.7; }
-.final-card { border: 3px solid #fbbf24 !important; background: linear-gradient(135deg, #1c1917, #292524) !important; box-shadow: 0 0 15px rgba(251, 191, 36, 0.3); }
-.match-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #94a3b8 !important; border-bottom: 1px solid #334155; padding-bottom: 6px; font-weight: bold; }
+
+/* 每一列的垂直分佈規劃 */
+.bracket-round { display: flex; flex-direction: column; justify-content: space-around; gap: 10px; min-width: 210px; }
+.round-title { font-size: 0.8rem; color: #fef3c7 !important; font-weight: 800; text-align: center; background: #1e293b; padding: 6px 8px; border-radius: 20px; border: 1px solid #475569; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+/* 卡片精美樣式 */
+.match-card { background: linear-gradient(135deg, #131a35, #1e294b); border: 2px solid #38bdf8; border-radius: 12px; padding: 10px; box-shadow: 0 6px 12px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 6px; }
+.border-gray { border-color: #475569 !important; opacity: 0.5; }
+.final-card { border: 3px solid #fbbf24 !important; background: linear-gradient(135deg, #1c1917, #292524) !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.5); transform: scale(1.05); }
+.match-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: #94a3b8 !important; border-bottom: 1px solid #334155; padding-bottom: 4px; font-weight: bold; }
 .team-row { display: flex; justify-content: space-between; align-items: center; }
-.team-name { font-size: 0.95rem; font-weight: 800; color: #f8fafc !important; }
-.team-score { font-size: 1.05rem; font-weight: 900; color: #fbbf24 !important; background: #0f172a; padding: 2px 10px; border-radius: 6px; min-width: 32px; text-align: center; border: 1px solid #334155; }
-.status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 900 !important; color: #ffffff !important; }
+.team-name { font-size: 0.85rem; font-weight: 800; color: #f8fafc !important; }
+.team-score { font-size: 0.95rem; font-weight: 900; color: #fbbf24 !important; background: #0f172a; padding: 1px 8px; border-radius: 4px; min-width: 28px; text-align: center; border: 1px solid #334155; }
+.status-badge { font-size: 0.65rem; padding: 1px 4px; border-radius: 4px; font-weight: 900 !important; color: #ffffff !important; }
 .status-badge.settled { background-color: #059669; }
 .status-badge.live { background-color: #dc2626; animation: pulse 1.5s infinite; }
 .status-badge.upcoming { background-color: #475569; }
-.next-route { font-size: 0.75rem; color: #38bdf8 !important; background: #0f172a; padding: 4px 8px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 4px; border: 1px solid #1e293b; }
+.next-route { font-size: 0.7rem; color: #38bdf8 !important; background: #0f172a; padding: 3px 6px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 2px; border: 1px solid #1e293b; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 </style>
-<div class="main-banner"><div class="main-title">🏆 2026 世界盃智能競猜中心</div><div class="sub-title" style="color:#38bdf8;">【官方 32 強賽程與繁體極淨對獎版】</div></div>
+<div class="main-banner"><div class="main-title">🏆 2026 世界盃智能競猜中心</div><div class="sub-title" style="color:#38bdf8;">【官方雙向對稱 32 強淘汰賽框架系統】</div></div>
 """, unsafe_allow_html=True)
 
 is_admin = ("role" in st.query_params and st.query_params["role"] == "boss")
@@ -245,16 +252,24 @@ with tabs[0]:
     df_ranking.index = df_ranking.index + 1
     st.dataframe(df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 動態樹狀圖與賽事填框 ====================
+# ==================== TAB 2: 雙向動態樹狀圖與賽事填框 ====================
 with tabs[1]:
-    st.markdown("### 🏆 32強淘汰賽動態框架")
+    st.markdown("### 🏆 32強對稱淘汰賽樹狀圖")
     
+    # 根據場次所在的左、右半區，自動化指向箭頭
     def get_route_text(m_id):
         m = int(m_id)
-        if 1 <= m <= 16: return f"➡️ 晉級至：M{17 + (m - 1) // 2}"
-        elif 17 <= m <= 24: return f"➡️ 晉級至：M{25 + (m - 17) // 2}"
-        elif 25 <= m <= 28: return f"➡️ 晉級至：M{29 + (m - 25) // 2}"
-        elif 29 <= m <= 30: return "🏆 前進總決賽 (M31)"
+        # 左半區 (向右匯聚)
+        if 1 <= m <= 8: return f"➡️ 晉級至：M{17 + (m - 1) // 2}"
+        elif 17 <= m <= 20: return f"➡️ 晉級至：M{25 + (m - 17) // 2}"
+        elif 25 <= m <= 26: return f"➡️ 晉級至：M{29 + (m - 25) // 2}"
+        elif m == 29: return "🏆 前進總決賽 (M31) ➡️"
+        # 右半區 (向左匯聚)
+        elif 9 <= m <= 16: return f"⬅️ 晉級至：M{21 + (m - 9) // 2}"
+        elif 21 <= m <= 24: return f"⬅️ 晉級至：M{27 + (m - 21) // 2}"
+        elif 27 <= m <= 28: return f"⬅️ 晉級至：M{30 + (m - 27) // 2}"
+        elif m == 30: return "⬅️ 🏆 前進總決賽 (M31)"
+        # 總決賽
         elif m == 31: return "👑 爭奪世界之巔"
         return ""
 
@@ -278,25 +293,33 @@ with tabs[1]:
         h_style = ' style="border-color: #fbbf24;"' if m_id == 31 else ''
         t_style = ' style="color:#fbbf24 !important; font-weight:900;"' if m_id == 31 else ''
         
-        html = f"""<div class="{cls}"><div class="match-header"{h_style}><span{t_style}>{title_name} (槽位 M{m_id})</span>{badge}</div><div class="team-row"><span class="team-name">🏠 {h}</span><span class="team-score">{s_h}</span></div><div class="team-row"><span class="team-name">✈️ {a}</span><span class="team-score">{s_a}</span></div>"""
-        if fg: html += f'<div style="font-size:0.75rem; color:#fef3c7;">⚽ 首名進球：{fg}</div>'
-        html += f'<div class="{"final-winner" if m_id==31 else "next-route"}">{get_route_text(m_id)}</div></div>'
+        html = f"""<div class="{cls}"><div class="match-header"{h_style}><span{t_style}>{title_name} (M{m_id})</span>{badge}</div><div class="team-row"><span class="team-name">🏠 {h}</span><span class="team-score">{s_h}</span></div><div class="team-row"><span class="team-name">✈️ {a}</span><span class="team-score">{s_a}</span></div>"""
+        if fg: html += f'<div style="font-size:0.7rem; color:#fef3c7;">⚽ 首名：{fg}</div>'
+        html += f'<div class="next-route">{get_route_text(m_id)}</div></div>'
         return html
 
+    # 渲染【左邊邊緣 -> 向內包夾 -> 中央決賽 <- 向內包夾 <- 右邊邊緣】結構
     bracket_html = f"""<div class="bracket-wrapper">
-    {"<div class='bracket-round'><div class='round-title'>⚔️ 32強賽 (M1-M16)</div>" + "".join([get_match_card_html(i, "32強") for i in range(1, 17)]) + "</div>"}
-    {"<div class='bracket-round'><div class='round-title'>🔥 16強賽 (M17-M24)</div>" + "".join([get_match_card_html(i, "16強") for i in range(17, 25)]) + "</div>"}
-    {"<div class='bracket-round'><div class='round-title'>⚡ 半準決賽 (M25-M28)</div>" + "".join([get_match_card_html(i, "八強") for i in range(25, 29)]) + "</div>"}
-    {"<div class='bracket-round'><div class='round-title'>🌟 準決賽 (M29-M30)</div>" + "".join([get_match_card_html(i, "四強") for i in range(29, 31)]) + "</div>"}
-    {"<div class='bracket-round'><div class='round-title' style='color:#fbbf24;'>👑 總決賽 (M31)</div>" + get_match_card_html(31, "FINAL") + "</div>"}
+    <div class='bracket-round'><div class='round-title'>⚔️ 左區 32強 (M1-M8)</div>{"".join([get_match_card_html(i, "32強") for i in range(1, 9)])}</div>
+    <div class='bracket-round'><div class='round-title'>🔥 左區 16強 (M17-M20)</div>{"".join([get_match_card_html(i, "16強") for i in range(17, 21)])}</div>
+    <div class='bracket-round'><div class='round-title'>⚡ 左區 八強 (M25-M26)</div>{"".join([get_match_card_html(i, "八強") for i in range(25, 27)])}</div>
+    <div class='bracket-round'><div class='round-title'>🌟 左區 四強 (M29)</div>{get_match_card_html(29, "四強")}</div>
+    
+    <div class='bracket-round'><div class='round-title' style='color:#fbbf24;'>👑 總決賽 (M31)</div>{get_match_card_html(31, "FINAL")}</div>
+    
+    <div class='bracket-round'><div class='round-title'>🌟 右區 四強 (M30)</div>{get_match_card_html(30, "四強")}</div>
+    <div class='bracket-round'><div class='round-title'>⚡ 右區 八強 (M27-M28)</div>{"".join([get_match_card_html(i, "八強") for i in range(27, 29)])}</div>
+    <div class='bracket-round'><div class='round-title'>🔥 右區 16強 (M21-M24)</div>{"".join([get_match_card_html(i, "16強") for i in range(21, 25)])}</div>
+    <div class='bracket-round'><div class='round-title'>⚔️ 右區 32強 (M9-M16)</div>{"".join([get_match_card_html(i, "32強") for i in range(9, 17)])}</div>
     </div>"""
     st.markdown(bracket_html, unsafe_allow_html=True)
     
     st.markdown("---")
     
+    # 管理員後台填框系統
     if is_admin:
-        st.markdown("### 🛠️ [管理員] 樹狀圖填框控制器")
-        st.info("請在此處選擇樹狀圖上的「槽位編號」，並將存活的球隊填入該框中。")
+        st.markdown("### 🛠️ [管理員] 樹狀圖對陣填框控制器")
+        st.info("請在此處選擇對稱樹狀圖上的「槽位編號 M1 ~ M31」，直接把對應的隊伍放進框位中。")
         
         all_teams = set(df_matches["home_team"].tolist() + df_matches["away_team"].tolist())
         all_teams = {t for t in all_teams if str(t).strip() and t not in ["待定", "待填入"]}
@@ -315,14 +338,14 @@ with tabs[1]:
         busy_teams = set(active_m["home_team"].tolist() + active_m["away_team"].tolist())
         idle_teams = [t for t in alive_teams if t not in busy_teams]
         
-        with st.expander("📍 點此打開【填入賽事】面板", expanded=True):
-            st.markdown(f"**當前可分配的空閒球隊：** `{', '.join(idle_teams) if idle_teams else '無'}`")
+        with st.expander("📍 點此打開【填入/指派賽事】面板", expanded=True):
+            st.markdown(f"**當前存活可用的球隊池：** `{', '.join(idle_teams) if idle_teams else '無'}`")
             
             with st.form("assign_bracket_form"):
                 c1, c2, c3 = st.columns([1, 2, 2])
                 
                 slot_options = [f"M{i}" for i in range(1, 32)]
-                selected_slot = c1.selectbox("🎯 選擇樹狀圖槽位", slot_options, index=16) 
+                selected_slot = c1.selectbox("🎯 選擇樹狀圖槽位", slot_options, index=0) 
                 
                 h_team = c2.selectbox("🏠 填入主隊", ["待填入"] + alive_teams)
                 a_team = c3.selectbox("✈️ 填入客隊", ["待填入"] + alive_teams)
@@ -347,7 +370,6 @@ with tabs[1]:
 # ==================== TAB 3: 投注中心 ====================
 with tabs[2]:
     st.markdown("### 🎲 員工自選賠率下注區")
-    # 過濾掉"待填入"的空賽事
     open_matches = df_matches[(df_matches['status'].isin(['未開賽', '進行中'])) & (df_matches['home_team'] != '待填入')]
     
     with st.container(border=True):
@@ -430,7 +452,7 @@ with tabs[2]:
 if is_admin:
     with tabs[3]:
         st.markdown("### ⚙️ 賽事狀態編輯器")
-        st.info("💡 如需排程球隊，請在「📅 賽況樹狀圖」下方的控制台操作。這裡僅用於修改球隊名稱或強制更改狀態兜底。")
+        st.info("💡 如需排程球隊，請直接在「📅 賽況樹狀圖」下方的控制台操作。這裡僅用於手動覆寫拼音或修正狀態兜底。")
         
         if not df_matches.empty:
             sel_edit_m = st.selectbox("選擇要修改的賽事", df_matches.apply(lambda r: f"M{r['match_id']} | {r['home_team']} VS {r['away_team']}", axis=1))
@@ -520,8 +542,6 @@ if is_admin:
 if is_admin:
     with tabs[5]:
         st.markdown("### 🏁 賽果登錄與全自動結算中心")
-        
-        # 只顯示有球隊且未結算的比賽
         unsettled = df_matches[(~df_matches["status"].str.contains("結算", na=False)) & (df_matches['home_team'] != '待填入')]
         
         if unsettled.empty: st.markdown("### 🎉 所有進行中賽事皆已結算完畢！")
@@ -566,6 +586,6 @@ if is_admin:
                                         df_users.loc[df_users["user_id"].astype(str) == u_id, "balance"] += float(amt)
                             save_sheet(df_bets, "Bets")
                             save_sheet(df_users, "Users")
-                    st.success(f"🎉 結算成功！已依容錯規則派發獎金！請至「📅 賽況樹狀圖」將【{win_t}】手動填入下一輪賽事框中。")
+                    st.success(f"🎉 結算成功！請至「📅 賽況樹狀圖」將【{win_t}】填入下一輪槽位框中。")
                     time.sleep(2)
                     st.rerun()
