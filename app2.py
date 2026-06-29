@@ -35,6 +35,18 @@ INITIAL_MATCHES = [
 for i in range(17, 32):
     INITIAL_MATCHES.append({"match_id": str(i), "home_team": "待填入", "away_team": "待填入", "status": "未開賽", "score_home": "", "score_away": "", "first_goal_player": ""})
 
+# 淘汰賽晉級軌跡圖：目前的 match_id -> (下一場 match_id, 該填入主隊還是客隊)
+NEXT_MATCH_MAP = {
+    1: (17, "home"), 2: (17, "away"), 3: (18, "home"), 4: (18, "away"),
+    5: (19, "home"), 6: (19, "away"), 7: (20, "home"), 8: (20, "away"),
+    9: (21, "home"), 10: (21, "away"), 11: (22, "home"), 12: (22, "away"),
+    13: (23, "home"), 14: (23, "away"), 15: (24, "home"), 16: (24, "away"),
+    17: (25, "home"), 18: (25, "away"), 19: (26, "home"), 20: (26, "away"),
+    21: (27, "home"), 22: (27, "away"), 23: (28, "home"), 24: (28, "away"),
+    25: (29, "home"), 26: (29, "away"), 27: (30, "home"), 28: (30, "away"),
+    29: (31, "home"), 30: (31, "away")
+}
+
 # ==================== 1. 初始化 Google Sheets 資料庫 ====================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1l7LZxRIv-WeApoVloQv0sLxFagDHclyeNJiRffTbB1E/edit?gid=0#gid=0"
 
@@ -207,7 +219,7 @@ with tabs[0]:
     df_ranking.index = df_ranking.index + 1
     st.dataframe(df_ranking.rename(columns={"name": "同事姓名", "balance": "積分餘額"})[["同事姓名", "積分餘額"]], use_container_width=True)
 
-# ==================== TAB 2: 雙向動態樹狀圖（安全 HTML 渲染） ====================
+# ==================== TAB 2: 雙向動態樹狀圖 ====================
 with tabs[1]:
     st.markdown("### 🏆 32強對稱淘汰賽樹狀圖")
     
@@ -253,7 +265,6 @@ with tabs[1]:
         html += f'<div class="next-route">{get_route_text(m_id)}</div></div>'
         return html
 
-    # 使用內嵌樣式的完整網頁框架，確保結構在獨立 Iframe 內完美渲染不跑版
     iframe_content = f"""
     <!DOCTYPE html>
     <html>
@@ -270,7 +281,7 @@ with tabs[1]:
             .bracket-wrapper {{
                 display: flex;
                 flex-direction: row;
-                justify(content: center);
+                justify-content: center;
                 gap: 15px;
                 padding: 10px 5px;
                 white-space: nowrap;
@@ -381,7 +392,6 @@ with tabs[1]:
     </body>
     </html>
     """
-    # 調用獨立原生的元件渲染結構圖，高寬自動包容滾動條
     components.html(iframe_content, height=880, scrolling=True)
     
     st.markdown("---")
@@ -393,7 +403,7 @@ with tabs[1]:
         settled_m = df_matches[df_matches["status"].str.contains("結算", na=False)]
         for _, row in settled_m.iterrows():
             try:
-                # 🛠️ 修正處：將原本命名為 sh, sa 的變數改名，避免覆蓋掉全域資料庫連線物件 sh 
+                # 已修正變數名稱避免衝突
                 h_score_val, a_score_val = int(float(row["score_home"])), int(float(row["score_away"]))
                 if h_score_val > a_score_val: eliminated_teams.add(str(row["away_team"]))
                 elif a_score_val > h_score_val: eliminated_teams.add(str(row["home_team"]))
@@ -583,15 +593,37 @@ if is_admin:
                 tc = [t for t in [str(c_m['home_team']), str(c_m['away_team'])] if t.strip()] or ["主隊", "客隊"]
                 win_t = st.selectbox("🥇 實際晉級隊伍 (防PK賽)：", tc)
                 
-                if st.button("📊 一鍵自動對獎並發送派彩", type="primary", use_container_width=True):
-                    with st.spinner('引擎高速運算中...'):
+                if st.button("📊 一鍵自動對獎與派彩 (含自動晉級)", type="primary", use_container_width=True):
+                    with st.spinner('引擎高速運算中... 正在處理賽果與晉級路線...'):
+                        # 1. 寫入當前賽果並更改狀態
                         df_matches.loc[df_matches["match_id"].astype(str) == s_mid, ["status", "score_home", "score_away", "first_goal_player"]] = ["已結算", str(score_h), str(score_a), fg.strip()]
+                        
+                        # 2. 全自動晉級演算法
+                        m_int = int(s_mid)
+                        next_info = NEXT_MATCH_MAP.get(m_int)
+                        next_msg = "🏆 本場為總決賽，世界盃冠軍誕生！"
+                        if next_info:
+                            next_m_id, pos = next_info
+                            mask_next = df_matches["match_id"].astype(str) == str(next_m_id)
+                            # 依據軌跡定位將贏家寫入下一場的主隊或客隊
+                            if pos == "home":
+                                df_matches.loc[mask_next, "home_team"] = win_t
+                            else:
+                                df_matches.loc[mask_next, "away_team"] = win_t
+                            next_msg = f"🚀 已自動將晉級隊伍【{win_t}】送入下一輪 M{next_m_id}！"
+                        
+                        # 3. 處理細單對獎
                         if not df_details.empty:
                             mask = df_details["match_id"].astype(str) == s_mid
                             for i, row in df_details[mask].iterrows():
                                 if "未開" in str(row["status"]):
                                     df_details.loc[i, "status"] = auto_evaluate_leg(row["playstyle"], row["selection"], score_h, score_a, fg, c_m['home_team'], c_m['away_team'])
-                        save_sheet(df_details, "BetDetails"); save_sheet(df_matches, "Matches")
+                        
+                        # 4. 同步至 Google Sheets (包含已更新的晉級賽事)
+                        save_sheet(df_details, "BetDetails")
+                        save_sheet(df_matches, "Matches")
+                        
+                        # 5. 處理大單派彩結算
                         if not df_bets.empty:
                             df_users["balance"] = pd.to_numeric(df_users["balance"], errors="coerce").fillna(0.0)
                             unsettled_bets = df_bets[df_bets["status"].str.contains("未開", na=False)]
@@ -604,6 +636,10 @@ if is_admin:
                                     if ns in ["贏"] and amt > 0:
                                         u_id = str(bet["user_id"]).strip()
                                         df_users.loc[df_users["user_id"].astype(str) == u_id, "balance"] += float(amt)
-                            save_sheet(df_bets, "Bets"); save_sheet(df_users, "Users")
-                    st.success(f"🎉 結算成功！請至「📅 賽況樹狀圖」將【{win_t}】填入下一輪槽位。")
-                    time.sleep(2); st.rerun()
+                            save_sheet(df_bets, "Bets")
+                            save_sheet(df_users, "Users")
+                            
+                    st.success(f"🎉 結算與派彩成功！\n\n{next_msg}")
+                    st.info("💡 提示：若發現填錯或晉級結果異常，請隨時切換至「📅 賽況樹狀圖」使用手動指派功能覆蓋修正。")
+                    time.sleep(3)
+                    st.rerun()
