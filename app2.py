@@ -31,7 +31,6 @@ INITIAL_MATCHES = [
     {"match_id": "15", "home_team": "Switzerland", "away_team": "Algeria", "status": "未开赛", "score_home": "", "score_away": "", "first_goal_player": ""},
     {"match_id": "16", "home_team": "Colombia", "away_team": "Ghana", "status": "未开赛", "score_home": "", "score_away": "", "first_goal_player": ""}
 ]
-# 预先建立 16强 到 决赛 的空格 (17~31场次)
 for i in range(17, 32):
     INITIAL_MATCHES.append({"match_id": str(i), "home_team": "", "away_team": "", "status": "未开赛", "score_home": "", "score_away": "", "first_goal_player": ""})
 
@@ -81,7 +80,6 @@ def save_sheet(df, sheet_name):
         worksheet = sh.worksheet(sheet_name)
         worksheet.clear()
         
-        # 🛡️ 终极防呆：定义标准栏位，防止写入多余的垃圾栏位 (例如旧版的 odds)
         columns_map = {
             "Users": ["user_id", "name", "balance"],
             "Matches": ["match_id", "home_team", "away_team", "status", "score_home", "score_away", "first_goal_player"],
@@ -90,13 +88,12 @@ def save_sheet(df, sheet_name):
         }
         
         if not df.empty:
-            # 🌟 自动过滤：如果 dataframe 里有多余的栏位，直接丢弃！
             if sheet_name in columns_map:
                 valid_cols = [c for c in columns_map[sheet_name] if c in df.columns]
                 df = df[valid_cols]
                 
             df_to_save = df.fillna("")
-            df_to_save = df_to_save.astype(str) # 强制转成字串，避免型态错误
+            df_to_save = df_to_save.astype(str)
             
             data_to_write = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
             try:
@@ -117,7 +114,6 @@ def save_sheet(df, sheet_name):
 
 # ==================== 2. 全自动对奖与过关拆单引擎 ====================
 def auto_evaluate_leg(playstyle, selection, hs, as_, first_goal, home_team, away_team):
-    """根据输入的比分，自动判断单注输赢"""
     try: hs, as_ = int(hs), int(as_)
     except ValueError: return "未开奖"
 
@@ -242,7 +238,6 @@ if df_users.empty:
     save_sheet(df_users, "Users")
 
 df_matches = read_sheet("Matches")
-# 🚨 若资料库完全没有比赛，自动载入预设的 32强赛程！
 if df_matches.empty:
     df_matches = pd.DataFrame(INITIAL_MATCHES)
     save_sheet(df_matches, "Matches")
@@ -282,8 +277,8 @@ with tabs[1]:
         h = str(row['home_team']).strip() or "待定"
         a = str(row['away_team']).strip() or "待定"
         s = row['status']
-        s_h = str(row['score_home']).strip() if s == "已结算" or s == "已结算" else "-"
-        s_a = str(row['score_away']).strip() if s == "已结算" or s == "已结算" else "-"
+        s_h = str(row['score_home']).strip() if "结算" in s else "-"
+        s_a = str(row['score_away']).strip() if "结算" in s else "-"
         
         badge = f'<span class="status-badge {"settled" if "结算" in s else "live" if s=="进行中" else "upcoming"}">{s if "结算" not in s else "已完赛"}</span>'
         cls = "match-card final-card" if m_id == 31 else "match-card"
@@ -308,7 +303,7 @@ with tabs[1]:
 # ==================== TAB 3: 投注中心 ====================
 with tabs[2]:
     st.markdown("### 🎲 员工自选赔率下注区")
-    open_matches = df_matches[df_matches['status'].isin(['未开赛', '进行中', '未开赛', '进行中'])]
+    open_matches = df_matches[df_matches['status'].isin(['未开赛', '进行中'])]
     
     with st.container(border=True):
         active_user = st.selectbox("👤 请选择身分：", df_users["name"].tolist())
@@ -399,16 +394,16 @@ if is_admin:
                 c1, c2, c3 = st.columns(3)
                 nh = c1.text_input("主队", value=str(t_row['home_team']))
                 na = c2.text_input("客队", value=str(t_row['away_team']))
-                ns = c3.selectbox("状态", ["未开赛", "进行中", "已结算"], index=["未开赛", "进行中", "已结算", "已结算"].index(t_row['status']) if t_row['status'] in ["未开赛", "进行中", "已结算", "已结算"] else 0)
+                ns = c3.selectbox("状态", ["未开赛", "进行中", "已结算"], index=["未开赛", "进行中", "已结算"].index(t_row['status']) if t_row['status'] in ["未开赛", "进行中", "已结算"] else 0)
                 if st.form_submit_button("💾 储存"):
-                    df_matches.loc[df_matches['match_id'].astype(str) == m_id, ['home_team', 'away_team', 'status']] = [nh.strip(), na.strip(), ns.replace("算", "算")] # Force uniform
+                    df_matches.loc[df_matches['match_id'].astype(str) == m_id, ['home_team', 'away_team', 'status']] = [nh.strip(), na.strip(), ns]
                     save_sheet(df_matches, "Matches"); st.toast("✅ 赛事已储存！", icon="✅"); time.sleep(1); st.rerun()
         elif m_mode == "➕ 新增赛事":
             with st.form("a_m"):
                 nid = st.text_input("自订ID (建议32以上)", value="32")
                 h, a = st.text_input("主队"), st.text_input("客队")
                 if st.form_submit_button("➕ 新增"):
-                    df_matches = pd.concat([df_matches, pd.DataFrame([{"match_id": nid, "home_team": h, "away_team": a, "status": "未开赛", "score_home": "", "score_away": "", "first_goal_player": ""}])], ignore_index=True)
+                    df_matches = pd.concat([df_matches, pd.DataFrame([{"match_id": str(nid), "home_team": h, "away_team": a, "status": "未开赛", "score_home": "", "score_away": "", "first_goal_player": ""}])], ignore_index=True)
                     save_sheet(df_matches, "Matches"); st.toast("✅ 成功新增赛事！", icon="🎉"); time.sleep(1); st.rerun()
 
 # ==================== TAB 5: 全自动对奖与派彩中心 ====================
@@ -426,8 +421,10 @@ if is_admin:
                 c_m = df_matches[df_matches["match_id"].astype(str) == s_mid].iloc[0]
                 
                 c1, c2, c3 = st.columns(3)
-                sh = c1.number_input("🏠 主队进球", min_value=0, value=0)
-                sa = c2.number_input("✈️ 客队进球", min_value=0, value=0)
+                
+                # 修复核心点：将变量名由 sh, sa 改为 score_h, score_a 以防与 gspread 的 sh 变量冲突！
+                score_h = c1.number_input("🏠 主队进球", min_value=0, value=0)
+                score_a = c2.number_input("✈️ 客队进球", min_value=0, value=0)
                 fg = c3.text_input("⚽ 首名进球员 (无请填:无)", value="无")
                 
                 tc = [t for t in [str(c_m['home_team']), str(c_m['away_team'])] if t.strip()] or ["主队", "客队"]
@@ -436,7 +433,7 @@ if is_admin:
                 if st.button("📊 一键自动对奖、发送派彩并晋级球队", type="primary", use_container_width=True):
                     with st.spinner('引擎高速运算中...'):
                         # 1. 更新赛果
-                        df_matches.loc[df_matches["match_id"].astype(str) == s_mid, ["status", "score_home", "score_away", "first_goal_player"]] = ["已结算", str(sh), str(sa), fg.strip()]
+                        df_matches.loc[df_matches["match_id"].astype(str) == s_mid, ["status", "score_home", "score_away", "first_goal_player"]] = ["已结算", str(score_h), str(score_a), fg.strip()]
                         
                         # 2. 自动晋级
                         if int(s_mid) <= 30: calculate_next_stage_advancement(s_mid, win_t)
@@ -446,7 +443,7 @@ if is_admin:
                             mask = df_details["match_id"].astype(str) == s_mid
                             for i, row in df_details[mask].iterrows():
                                 if row["status"] == "未开奖":
-                                    df_details.loc[i, "status"] = auto_evaluate_leg(row["playstyle"], row["selection"], sh, sa, fg, c_m['home_team'], c_m['away_team'])
+                                    df_details.loc[i, "status"] = auto_evaluate_leg(row["playstyle"], row["selection"], score_h, score_a, fg, c_m['home_team'], c_m['away_team'])
                         save_sheet(df_details, "BetDetails")
                         save_sheet(df_matches, "Matches")
                         
